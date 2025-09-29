@@ -14,7 +14,7 @@ export default function Analytics() {
   const [token, setToken] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
   // Filters state
   const [filters, setFilters] = useState({
     minProducts: '',
@@ -44,7 +44,7 @@ export default function Analytics() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.get(`http://localhost:4000/admin/analytics`, {
+      const res = await axios.get(`${apiurl}/admin/analytics`, {
         headers: { adminId,Authorization: `Bearer ${token}` },
       });
       setAnalytics(res.data);

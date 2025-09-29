@@ -47,8 +47,9 @@ export default function Retailers() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionAction, setSubscriptionAction] = useState<'StartNew' | 'HandleDays'>('StartNew');
   const [handleDaysType, setHandleDaysType] = useState<'increase' | 'decrease'>('increase');
-
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
   useEffect(() => {
+    
     const storedId = localStorage.getItem('userid');
     const storedToken = localStorage.getItem('token');
     if (storedId) setId(storedId);
@@ -58,7 +59,7 @@ export default function Retailers() {
       setLoading(true);
       try {
         console.log(storedId);
-        const res = await axios.get<Retailer[]>('http://localhost:4000/admin/retailers', {
+        const res = await axios.get<Retailer[]>(`${apiurl}/admin/retailers`, {
           headers: { id: storedId, Authorization: `Bearer ${storedToken}` },
         });
         console.log(res);
@@ -93,7 +94,7 @@ export default function Retailers() {
       const newStatus = hasAccess(currentStatus) ? 'inactive' : 'active';
       let Status = newStatus;
       const response = await axios.put(
-        'http://localhost:4000/admin/toggle-retailer-status',
+        `${apiurl}/admin/toggle-retailer-status`,
         {
           userid: retailerUserId,
           AdminId: id,
@@ -150,7 +151,7 @@ export default function Retailers() {
     e.preventDefault();
     try {
 
-      const response = await axios.post('http://localhost:4000/auth/registeraccessretailer', {
+      const response = await axios.post(`${apiurl}/auth/registeraccessretailer`, {
         email: newRetailer.email,
         id: id,
         subscription: newRetailer.subscription,
@@ -213,7 +214,7 @@ export default function Retailers() {
         payload.handleDaysType = handleDaysType;
       }
       await axios.put(
-        'http://localhost:4000/admin/subscription',
+        `${apiurl}/admin/subscription`,
         payload,
         {
           headers: {

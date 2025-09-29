@@ -4,11 +4,10 @@ import RetailerNavbar from './RetailerNavbar';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { BACKEND_URL } from '../constants/backend';
 import { toast } from 'react-toastify';
 
 const WALLPAPER_URL = '/wallpaper.png';
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
 function useIsMobile(breakpoint = 640) {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -35,8 +34,8 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
   const isMobile = useIsMobile();
   const device = isMobile ? 'mobile' : 'desktop';
   const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(null);
-
-  const backendUrl = BACKEND_URL;
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
+  const backendUrl = apiurl;
 
   const getFullWallpaperUrl = (url: string | null) => {
     if (!url) return null;
@@ -54,7 +53,7 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
         const endpoint = userType === 'admin'
           ? `/admin/wallpaper?device=${isMobile ? 'mobile' : 'desktop'}`
           : `/retailer/wallpaper?device=${isMobile ? 'mobile' : 'desktop'}`;
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setWallpaperUrl(res.data.url || null);
@@ -82,7 +81,7 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
       if (!token) return;
       try {
         const endpoint = userType === 'admin' ? '/product/all' : '/product/all-retailer';
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (userType === 'admin') {
@@ -108,7 +107,7 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
       if (!token) return;
       try {
         const endpoint = userType === 'admin' ? '/admin/custom-categories' : '/retailer/custom-categories';
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setCategories(res.data || []);
@@ -127,7 +126,7 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
       if (!token) return;
       try {
         const endpoint = userType === 'admin' ? '/admin/custom-categories' : '/retailer/custom-categories';
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setCategories(res.data || []);
@@ -148,7 +147,7 @@ export default function PostLoginPage({ userType }: { userType: 'admin' | 'retai
     if (!token) return;
     try {
       const endpoint = userType === 'admin' ? '/admin/custom-categories' : '/retailer/custom-categories';
-      await axios.post(`${BACKEND_URL}${endpoint}`, { categories }, {
+      await axios.post(`${apiurl}${endpoint}`, { categories }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setShowModal(false);
@@ -360,7 +359,7 @@ function CategoryModal({
       if (!token) return;
       try {
         const endpoint = userType === 'admin' ? '/admin/custom-categories' : '/retailer/custom-categories';
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDbCategories(res.data || []);
@@ -376,13 +375,13 @@ function CategoryModal({
     if (!token) return;
     try {
       const endpoint = userType === 'admin' ? '/admin/custom-categories' : '/retailer/custom-categories';
-      await axios.delete(`${BACKEND_URL}${endpoint}`, {
+      await axios.delete(`${apiurl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
         data: { name: catName },
       });
       toast.success('Category deleted');
       // Refresh categories
-      const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+      const res = await axios.get(`${apiurl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDbCategories(res.data || []);

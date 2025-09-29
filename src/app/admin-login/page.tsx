@@ -5,17 +5,18 @@ import { FormEvent, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { jwtDecode } from 'jwt-decode';
-import { BACKEND_URL } from '../../constants/backend';
+
 
 export default function AdminLogin() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const response = await axios.post(`${BACKEND_URL}/auth/loginAdmin`, { email, password });
+      const response = await axios.post(`${apiurl}/auth/loginAdmin`, { email, password });
       console.log('Admin login attempt:', { email, password });
       const token = response.data.access_token;
       if (token) {

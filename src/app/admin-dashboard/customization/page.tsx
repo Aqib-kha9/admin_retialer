@@ -6,6 +6,7 @@ import { jwtDecode } from 'jwt-decode';
 
 
 export default function CustomizationPage() {
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
   // Wallpaper/banner state
   const [wallpaperDesktopFile, setWallpaperDesktopFile] = useState<File | null>(null);
   const [wallpaperDesktopUrl, setWallpaperDesktopUrl] = useState('');
@@ -48,7 +49,6 @@ export default function CustomizationPage() {
 
   // Uploaded wallpapers and banners state
   const [uploadedWallpapersBanners, setUploadedWallpapersBanners] = useState<any[]>([]);
-  const backendUrl = 'http://localhost:4000'; // Use your backend URL
 
   // Handler to save field visibility
   const [fieldSaveMessage, setFieldSaveMessage] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export default function CustomizationPage() {
     const fetchData = async () => {
       try {
         // Fetch product fields
-        const schemaRes = await axios.get('http://localhost:4000/product/schema');
+        const schemaRes = await axios.get(`${apiurl}/product/schema`);
         const productFieldsArr = Object.keys(schemaRes.data?.product || {});
         const inventoryFieldsArr = Object.keys(schemaRes.data?.inventory || {});
         const allFields = Array.from(new Set([...productFieldsArr, ...inventoryFieldsArr]));
@@ -102,7 +102,7 @@ export default function CustomizationPage() {
         const storedToken = localStorage.getItem('token');
         if (!storedToken) return;
         const decoded: any = jwtDecode(storedToken);
-        const retailersRes = await axios.get('http://localhost:4000/admin/retailers', {
+        const retailersRes = await axios.get(`${apiurl}/admin/retailers`, {
           headers: {Authorization: `Bearer ${storedToken}` },
         });
         const retailerList = (retailersRes.data || []).map((r: any) => ({
@@ -113,7 +113,7 @@ export default function CustomizationPage() {
         setRetailers(retailerList);
 
         // Fetch products
-        const productsRes = await axios.get('http://localhost:4000/product/all', {
+        const productsRes = await axios.get(`${apiurl}/product/all`, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         const productList = (productsRes.data || []).map((p: any) => ({
@@ -122,14 +122,14 @@ export default function CustomizationPage() {
         }));
         setProducts(productList);
         // Fetch offers (for this admin/party)
-        const offersRes = await axios.get('http://localhost:4000/offer/admin', {
+        const offersRes = await axios.get(`${apiurl}/offer/admin`, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         // Map _id to id for frontend 
         setOffers((offersRes.data || []).map((o: any) => ({ ...o, id: o._id })));
 
         // Fetch saved field visibility for each retailer
-        const retailerFieldsRes = await axios.get(`${backendUrl}/admin/retailer-fields/all`, {
+        const retailerFieldsRes = await axios.get(`${apiurl}/admin/retailer-fields/all`, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         const retailerFieldsData = retailerFieldsRes.data || [];
@@ -155,7 +155,7 @@ export default function CustomizationPage() {
         setFieldVisibility(initialFieldVisibility);
 
         // Fetch uploaded wallpapers and banners
-        const uploadedRes = await axios.get(`${backendUrl}/admin/wallpaper-banner/all`, {
+        const uploadedRes = await axios.get(`${apiurl}/admin/wallpaper-banner/all`, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         setUploadedWallpapersBanners(uploadedRes.data || []);
@@ -286,7 +286,7 @@ export default function CustomizationPage() {
           valid_from: validFrom,
           valid_to: validTo,
         };
-        const res = await axios.post('http://localhost:4000/offer', payload, {
+        const res = await axios.post(`${apiurl}/offer`, payload, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         newOffers.push({ ...res.data, id: res.data._id });
@@ -310,7 +310,7 @@ export default function CustomizationPage() {
     const storedToken = localStorage.getItem('token');
     if (!storedToken) return;
     try {
-      await axios.delete(`http://localhost:4000/offer/${offerId}`, {
+      await axios.delete(`${apiurl}/offer/${offerId}`, {
         headers: { Authorization: `Bearer ${storedToken}` },
       });
       setOffers(prev => prev.filter(o => o.id !== offerId));
@@ -338,7 +338,7 @@ export default function CustomizationPage() {
       if (file) formData.append('file', file);
       else if (url) formData.append('url', url);
       try {
-        await axios.post('http://localhost:4000/admin/upload-wallpaper-banner', formData, {
+        await axios.post(`${apiurl}/admin/upload-wallpaper-banner`, formData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         results.push(`${type} (${device}) uploaded successfully`);
@@ -355,7 +355,7 @@ export default function CustomizationPage() {
     ]);
 
     // Refresh uploaded wallpapers/banners after upload
-    const uploadedRes = await axios.get(`${backendUrl}/admin/wallpaper-banner/all`, {
+    const uploadedRes = await axios.get(`${apiurl}/admin/wallpaper-banner/all`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     setUploadedWallpapersBanners(uploadedRes.data || []);
@@ -371,7 +371,7 @@ export default function CustomizationPage() {
     setUploadMessage(null);
     setUploadError(null);
     try {
-      await axios.delete(`${backendUrl}/admin/wallpaper-banner/${id}`, {
+      await axios.delete(`${apiurl}/admin/wallpaper-banner/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUploadedWallpapersBanners(prev => prev.filter(item => item._id !== id));
@@ -416,7 +416,7 @@ export default function CustomizationPage() {
 
     try {
       await axios.post(
-        `${backendUrl}/admin/retailer-fields`,
+        `${apiurl}/admin/retailer-fields`,
         { fieldVisibility: changedFieldVisibility },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -541,7 +541,7 @@ export default function CustomizationPage() {
                 {uploadedWallpapersBanners.map(item => (
                   <div key={item._id} className="bg-gray-100 rounded-lg p-4 flex flex-col items-center shadow">
                     <img
-                      src={item.url?.startsWith('/uploads/') ? backendUrl + item.url : item.url}
+                      src={item.url?.startsWith('/uploads/') ? apiurl + item.url : item.url}
                       alt={`${item.type} ${item.device}`}
                       className="w-full h-32 object-cover rounded mb-2"
                     />

@@ -48,7 +48,7 @@ export default function TallySyncPage() {
   const [schemaFields, setSchemaFields] = useState<{ name: string; required: boolean }[]>([]);
 
 
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
 
   // Standard fields for placeholder
   const standardFields = ["Name", "SKU", "Price", "Category", "Brand", "Closing Balance"];
@@ -66,7 +66,7 @@ export default function TallySyncPage() {
     // Fetch the user's previously saved companies for the dropdown
     const fetchCompanies = async () => {
       try {
-        const res = await axios.get("http://localhost:4000/admin/get-companies", {
+        const res = await axios.get(`${apiurl}/admin/get-companies`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.data?.companies && res.data.companies.length > 0) {
@@ -96,7 +96,7 @@ export default function TallySyncPage() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://localhost:4000/admin/tallysync",
+        `${apiurl}/admin/tallysync`,
         {
           // ✅ Proper Request Payload
           port: port,
@@ -190,7 +190,7 @@ export default function TallySyncPage() {
 
     const fetchSchema = async () => {
       try {
-        const res = await axios.get("http://localhost:4000/product/schema");
+        const res = await axios.get(`${apiurl}/product/schema`);
         const extract = (obj: any, source: "product" | "inventory") => {
           return Object.entries(obj)
             .filter(([name]) => !excludedFields.includes(name))
@@ -228,7 +228,7 @@ export default function TallySyncPage() {
       const token = localStorage.getItem("token");
       if (!token) return;
       try {
-        const res = await axios.get("http://localhost:4000/admin/get-tally-mapping", {
+        const res = await axios.get(`${apiurl}/admin/get-tally-mapping`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.data?.fieldMapping) {
@@ -255,7 +255,7 @@ export default function TallySyncPage() {
       }
 
       await axios.post(
-        "http://localhost:4000/admin/save-tally-mapping",
+        `${apiurl}/admin/save-tally-mapping`,
         { fieldMapping: inputMapping }, // ✅ send user input!
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -299,7 +299,7 @@ export default function TallySyncPage() {
 
     try {
       const res = await axios.post(
-        "http://localhost:4000/admin/save-company",
+        `${apiurl}/admin/save-company`,
         { companyName: companyToSave }, // Use the correct state variable
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -327,7 +327,7 @@ export default function TallySyncPage() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://localhost:4000/admin/tallysync",
+        `${apiurl}/admin/tallysync`,
         {
           port,
           fieldMapping,

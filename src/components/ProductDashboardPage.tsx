@@ -9,7 +9,7 @@ import AdminNavbar from './AdminNavbar';
 import RetailerNavbar from './RetailerNavbar';
 import Fuse from 'fuse.js';
 import type { FuseResult } from 'fuse.js';
-import { BACKEND_URL } from '../constants/backend';
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
 
 function useIsMobile(breakpoint = 640) {
   const [isMobile, setIsMobile] = useState(false);
@@ -52,7 +52,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const isMobile = useIsMobile();
   const device = isMobile ? 'mobile' : 'desktop';
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  const backendUrl = BACKEND_URL;
+  const backendUrl = apiurl;
 
   // Add click outside handler for profile menu
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -162,6 +162,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    
     if (file) {
       try {
         const text = await file.text();
@@ -200,7 +201,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           return;
         }
         const response = await axios.post(
-          `${BACKEND_URL}/product/bulk-import`,
+          `${apiurl}/product/bulk-import`,
           { products },
           {
             headers: {
@@ -229,7 +230,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
         ? "/product/all"
         : "/product/all-retailer";
     try {
-      const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+      const res = await axios.get(`${apiurl}${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -335,7 +336,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
         const formData = new FormData();
         selectedImageFiles.forEach((file) => formData.append('images', file));
         const uploadRes = await axios.post(
-          `${BACKEND_URL}/product/upload-images`,
+          `${apiurl}/product/upload-images`,
           formData,
           {
             headers: {
@@ -357,7 +358,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
         inventory: undefined
       };
       const productResponse = await axios.post(
-        `${BACKEND_URL}/product/add-product`,
+        `${apiurl}/product/add-product`,
         productPayload,
         {
           headers: {
@@ -374,7 +375,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           expiry_date: productData.inventory.expiry_date
         };
         const inventoryResponse = await axios.post(
-          `${BACKEND_URL}/product/add-inventory`,
+          `${apiurl}/product/add-inventory`,
           inventoryPayload,
           {
             headers: {
@@ -397,7 +398,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
-    return `${BACKEND_URL}${imagePath}`;
+    return `${apiurl}${imagePath}`;
   };
 
   const resetFilters = () => {
@@ -482,7 +483,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
       const token = localStorage.getItem('token');
       if (!token) return;
       try {
-        const res = await axios.get(`${BACKEND_URL}/admin/banner?device=${device}`, {
+        const res = await axios.get(`${apiurl}/admin/banner?device=${device}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setBannerUrl(res.data.url || null);

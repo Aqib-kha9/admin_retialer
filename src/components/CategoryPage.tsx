@@ -9,7 +9,7 @@ export default function CategoryPage({ userType }: { userType: 'admin' | 'retail
   const [category, setCategory] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
   useEffect(() => {
     const fetchCategoryAndProducts = async () => {
       setLoading(true);
@@ -18,8 +18,8 @@ export default function CategoryPage({ userType }: { userType: 'admin' | 'retail
       try {
         // Fetch all categories
         const catEndpoint = userType === 'admin'
-          ? 'http://localhost:4000/admin/custom-categories'
-          : 'http://localhost:4000/retailer/custom-categories';
+          ? `${apiurl}/admin/custom-categories`
+          : `${apiurl}/retailer/custom-categories`;
         const catRes = await axios.get(catEndpoint, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -33,8 +33,8 @@ export default function CategoryPage({ userType }: { userType: 'admin' | 'retail
         if (match && match.productIds && match.productIds.length > 0) {
           // Fetch all products, then filter
           const prodEndpoint = userType === 'admin'
-            ? 'http://localhost:4000/product/all'
-            : 'http://localhost:4000/product/all-retailer';
+            ? `${apiurl}/product/all`
+            : `${apiurl}/product/all-retailer`;
           const prodRes = await axios.get(prodEndpoint, {
             headers: { Authorization: `Bearer ${token}` },
           });

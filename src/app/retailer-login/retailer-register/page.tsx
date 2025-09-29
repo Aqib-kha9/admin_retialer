@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { BACKEND_URL } from '../../../constants/backend';
+
 
 // List of Indian states and their major cities
 const statesAndCities: { [key: string]: string[] } = {
@@ -63,7 +63,7 @@ export default function RetailerRegister() {
   const [cities, setCities] = useState<string[]>([]);
   const [zipLoading, setZipLoading] = useState(false);
   const [customCity, setCustomCity] = useState('');
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
   useEffect(() => {
     // Update cities when state changes
     if (formData.state && statesAndCities[formData.state]) {
@@ -135,7 +135,7 @@ export default function RetailerRegister() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const response = await axios.post(`${BACKEND_URL}/auth/register`, formData);
+      const response = await axios.post(`${apiurl}/auth/register`, formData);
       console.log('Retailer registration attempt:', formData);
       toast.success('Retailer registration successful');
       router.push('/retailer-login');

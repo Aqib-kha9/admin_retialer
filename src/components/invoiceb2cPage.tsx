@@ -81,7 +81,7 @@ export default function InvoicePage({ userType }: InvoiceB2CPageProps) {
   const [logoPreview, setLogoPreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
   // Prefill products from cart if present
   useEffect(() => {
     const storedCart = localStorage.getItem('invoiceCart');
@@ -191,7 +191,7 @@ export default function InvoicePage({ userType }: InvoiceB2CPageProps) {
   // Download PDF
   const handleDownload = async () => {
     const token = localStorage.getItem('token');
-    const response = await fetch("http://localhost:4000/invoice/generate-pdf", {
+    const response = await fetch(`${apiurl}/invoice/generate-pdf`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

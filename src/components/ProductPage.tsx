@@ -4,7 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
 import { FaPen, FaArrowLeft } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
-import { BACKEND_URL } from '../constants/backend';
+
 import { jwtDecode } from 'jwt-decode';
 
 export default function ProductDetailsPage({ userType }: { userType: 'admin' | 'retailer' }) {
@@ -20,7 +20,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
   const [editFields, setEditFields] = useState<any>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingFields, setPendingFields] = useState<any>(null);
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
   // Get the correct dashboard path based on user type
   const getDashboardPath = () => {
     return userType === 'admin' ? '/admin-dashboard' : '/retailer-dashboard';
@@ -50,7 +50,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
       try {
         const token = localStorage.getItem("token");
         const endpoint = userType === "admin" ? "/product/all" : "/product/all-retailer";
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         let found;
@@ -84,7 +84,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
   const getImageUrl = (img: string) => {
     if (!img) return '';
     if (img.startsWith('http')) return img;
-    return `${BACKEND_URL}${img}`;
+    return `${apiurl}${img}`;
   };
 
   const handleAddToCart = () => {
@@ -136,14 +136,14 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
     if (!pendingFields || Object.keys(pendingFields).length === 0) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${BACKEND_URL}/product/update/${product.product_id}`, pendingFields, {
+      await axios.post(`${apiurl}/product/update/${product.product_id}`, pendingFields, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success('Product updated!');
       setEditing(false);
       setPendingFields(null);
       // Refresh product
-      const res = await axios.get(`${BACKEND_URL}/product/all`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${apiurl}/product/all`, { headers: { Authorization: `Bearer ${token}` } });
       const found = res.data.find((p: any) => p.product_id === productId);
       setProduct(found);
     } catch (err) {

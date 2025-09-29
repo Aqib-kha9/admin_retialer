@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 import axios from 'axios';
-import { BACKEND_URL } from '../constants/backend';
 import { toast } from 'react-toastify';
 
 export default function ProfilePage({ userType }: { userType: 'admin' | 'retailer' }) {
@@ -12,7 +11,7 @@ export default function ProfilePage({ userType }: { userType: 'admin' | 'retaile
   const [formData, setFormData] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
-
+const apiurl = process.env.NEXT_PUBLIC_APIURL;
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
@@ -20,7 +19,7 @@ export default function ProfilePage({ userType }: { userType: 'admin' | 'retaile
         const token = localStorage.getItem('token');
         if (!token) return;
         const endpoint = userType === 'admin' ? '/admin/profile' : '/retailer/profile';
-        const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         // Handle new backend format: all details in res.data.user, store name in res.data.storename or res.data.store_name
@@ -68,14 +67,14 @@ export default function ProfilePage({ userType }: { userType: 'admin' | 'retaile
         state: formData.state,
         zip: formData.zip,
       };
-      await axios.patch(`${BACKEND_URL}${endpoint}`, payload, {
+      await axios.patch(`${apiurl}${endpoint}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success('Profile updated successfully!');
       setIsEditing(false);
       // Reload profile data
       setLoading(true);
-      const res = await axios.get(`${BACKEND_URL}${endpoint}`, {
+      const res = await axios.get(`${apiurl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const user = res.data.user || {};
