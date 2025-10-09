@@ -1,135 +1,144 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { useRouter } from "next/navigation";
-import AdminNavbar from '../../../components/AdminNavbar';
-import { headers } from "next/headers";
+import AdminNavbar from "../../../components/AdminNavbar";
 
 type Notification = {
   message: string;
   type: "success" | "error" | "info";
 };
 
+type SyncResponse = {
+  success: boolean;
+  requestId: string;
+  command: {
+    requestId: string;
+    action: string;
+    payload: {
+      companyName: string;
+      port: number;
+    };
+    signature: string;
+  };
+};
+
 export default function TallySyncPage() {
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<null | { success: boolean; message: string; details?: any }>(null);
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
   const [port, setPort] = useState("9000");
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const [tallyProducts, setTallyProducts] = useState<any[]>([]);
-  const [allFields, setAllFields] = useState<string[]>([]);
-  const [companyName, setCompanyName] = useState("");
-  const [status, setStatus] = useState('');
-  const [isError, setIsError] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const [lastSyncStatus, setLastSyncStatus] = useState<string>("");
-  const [fieldMapping, setFieldMapping] = useState<{ [key: string]: string }>({});
-  const [preFilledFields, setPreFilledFields] = useState<{ [key: string]: string }>({});
-  const [mappingDirty, setMappingDirty] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [statusType, setStatusType] = useState<"success" | "error" | "">("");
-  const [fields, setFields] = useState<{ name: string; type: string; source: string; required: boolean }[]>([]);
-  const [inputMapping, setInputMapping] = useState<{ [key: string]: string }>({});
+  const [selectedCompany, setSelectedCompany] = useState("");
+  const [savedCompanies, setSavedCompanies] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
   const [notification, setNotification] = useState<Notification | null>(null);
-
-  // State for the sync process itself
-  const [isSyncing, setIsSyncing] = useState(false); // For loading states
-  const [isAutoSyncing, setIsAutoSyncing] = useState(false); // Tracks if the interval is active
   const [lastSync, setLastSync] = useState<{ time: Date; type: "success" | "error" } | null>(null);
+  const [companyToSave, setCompanyToSave] = useState("");
+  const [syncResponse, setSyncResponse] = useState<SyncResponse | null>(null);
+  const [agentStatus, setAgentStatus] = useState<"online" | "offline" | "checking">("checking");
+  const [authToken, setAuthToken] = useState<string>("");
+  const [showToken, setShowToken] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // State for form inputs and selections
-  const [companyToSave, setCompanyToSave] = useState(""); // For the 'Save Company' input
-  const [savedCompanies, setSavedCompanies] = useState<string[]>([]); // To populate the dropdown
-  const [selectedCompany, setSelectedCompany] = useState<string>(""); // The company the user picks to sync
-
-  // State for the field mapping table
-  const [schemaFields, setSchemaFields] = useState<{ name: string; required: boolean }[]>([]);
-
-
-const apiurl = process.env.NEXT_PUBLIC_APIURL;
-
-  // Standard fields for placeholder
-  const standardFields = ["Name", "SKU", "Price", "Category", "Brand", "Closing Balance"];
-
+  // ✅ Fetch saved companies and token
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setNotification({ message: "You are not logged in.", type: "error" });
-      return;
-    }
-
-    // Fetch the schema for the mapping table
-
-
-    // Fetch the user's previously saved companies for the dropdown
     const fetchCompanies = async () => {
       try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        setAuthToken(token);
         const res = await axios.get(`${apiurl}/admin/get-companies`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.data?.companies && res.data.companies.length > 0) {
+        if (res.data?.companies?.length > 0) {
           setSavedCompanies(res.data.companies);
-          setSelectedCompany(res.data.companies[0]); // Default to the first company
+          setSelectedCompany(res.data.companies[0]);
         }
-      } catch (error) {
-        console.error("Error fetching companies", error);
+      } catch (err) {
+        console.error("Error fetching companies", err);
+      }
+    };
+    fetchCompanies();
+    checkAgentStatus();
+  }, [apiurl]);
+
+  // ✅ Check agent status using fetch-tally endpoint
+  const checkAgentStatus = async () => {
+    setAgentStatus("checking");
+    try {
+      const token = localStorage.getItem("token");
+      // Use fetch-tally endpoint with test parameters to check if agent is responsive
+      await axios.get(`${apiurl}/agent/sync/fetch-tally`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { companyName: "TEST", port: 9000 },
+        timeout: 5000
+      });
+      setAgentStatus("online");
+    } catch (error: any) {
+      // If we get any response (even error), agent is online
+      // Only mark as offline if it's a network error or timeout
+      if (error.code === 'ECONNREFUSED' || error.code === 'NETWORK_ERROR' || error.message?.includes('timeout')) {
+        setAgentStatus("offline");
+      } else {
+        // If we get any HTTP response (even 404/400), agent is online
+        setAgentStatus("online");
       }
     }
+  };
 
-    fetchCompanies();
-  }, []);
-
-  // --- UNIFIED SYNC LOGIC ---
-  // A single, robust function to handle sync requests
-  const runSync = async () => {
-    // Validation: Ensure a company is selected before syncing
+  // ✅ Unified Sync Logic (Agent API)
+  const runAgentSync = async () => {
     if (!selectedCompany) {
       setNotification({ message: "Please select a company to sync.", type: "error" });
       return;
     }
 
     setIsSyncing(true);
-    setNotification(null); // Clear previous notifications
+    setNotification({ message: "Sending request to Tally Agent...", type: "info" });
+    setSyncResponse(null);
 
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(
-        `${apiurl}/admin/tallysync`,
+      const res = await axios.get(
+        `${apiurl}/agent/sync/fetch-tally`,
         {
-          // ✅ Proper Request Payload
-          port: port,
-          companyName: selectedCompany, // Send the selected company for validation
-          fieldMapping: inputMapping,   // Send the current user-defined mapping
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+          headers: { Authorization: `Bearer ${token}` },
+          params: { companyName: selectedCompany, port },
+        }
       );
 
-      // Handle Success
-      setNotification({ message: res.data.message || "Sync completed successfully!", type: "success" });
-      setLastSync({ time: new Date(), type: "success" });
+      if (res.data?.success) {
+        setSyncResponse(res.data);
+        setNotification({
+          message: `✅ Sync command sent successfully!`,
+          type: "success",
+        });
+        setLastSync({ time: new Date(), type: "success" });
+        setAgentStatus("online");
+      } else {
+        setNotification({
+          message: res.data?.message || "Unexpected response from agent.",
+          type: "error",
+        });
+        setLastSync({ time: new Date(), type: "error" });
+      }
     } catch (err: any) {
-      // ✅ Improved Error Handling: Display specific error from backend
-      const errorMessage = err.response?.data?.message || "An unknown sync error occurred. Check Tally and network.";
-      setNotification({ message: errorMessage, type: "error" });
+      const errorMsg = err.response?.data?.message || "Failed to start sync. Check if Agent is running.";
+      console.error("Agent Sync Error:", err);
+      setNotification({ message: errorMsg, type: "error" });
       setLastSync({ time: new Date(), type: "error" });
+      setAgentStatus("offline");
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // --- USER CONTROL FUNCTIONS FOR SYNC ---
+  // ✅ Auto-sync logic (every 5 minutes)
   const handleStartAutoSync = () => {
     if (isAutoSyncing) return;
-
-    // Run the first sync immediately
-    runSync();
-
-    // Start the 5-minute interval
-    intervalRef.current = setInterval(runSync, 5 * 60 * 1000);
+    runAgentSync(); // Run immediately
+    intervalRef.current = setInterval(runAgentSync, 5 * 60 * 1000);
     setIsAutoSyncing(true);
-    setNotification({ message: "Automatic 5-minute sync started.", type: "info" });
+    setNotification({ message: "🔄 Auto-sync started (every 5 minutes)", type: "info" });
   };
 
   const handleStopAutoSync = () => {
@@ -137,424 +146,388 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     setIsAutoSyncing(false);
-    setNotification({ message: "Automatic sync stopped.", type: "info" });
+    setNotification({ message: "⏹️ Auto-sync stopped.", type: "info" });
   };
 
-  // Cleanup interval when the user navigates away
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
-
-
-
-
-  // Extract Tally products and fields after sync
-  useEffect(() => {
-    if (syncResult && syncResult.success && syncResult.details) {
-      let products: any[] = [];
-      if (Array.isArray(syncResult.details.products)) {
-        products = syncResult.details.products;
-      } else if (Array.isArray(syncResult.details)) {
-        products = syncResult.details;
-      } else if (syncResult.details && typeof syncResult.details === 'object') {
-        const firstArr = Object.values(syncResult.details).find(v => Array.isArray(v));
-        if (Array.isArray(firstArr)) products = firstArr;
-      }
-      setTallyProducts(products);
-      const fields = new Set<string>();
-      products.forEach(prod => Object.keys(prod || {}).forEach(f => fields.add(f)));
-      setAllFields(Array.from(fields));
-      const stdMap: { [key: string]: string } = {};
-      ["NAME", "SKU", "RATE", "PARENT", "CATEGORY", "PRICE", "CLOSINGBALANCE"].forEach(std => {
-        const match = Array.from(fields).find(f => f.toLowerCase() === std.toLowerCase());
-        if (match) stdMap[match] = std.toLowerCase();
-      });
-      setFieldMapping(stdMap);
-    }
-  }, [syncResult]);
-
-  useEffect(() => {
-    const excludedFields = [
-      "created_at",
-      "updated_at",
-      "image_blob",
-      "party_id",
-      "product_id",
-      "parent_product_id",
-      "tally_account",
-    ];
-
-    const fetchSchema = async () => {
-      try {
-        const res = await axios.get(`${apiurl}/product/schema`);
-        const extract = (obj: any, source: "product" | "inventory") => {
-          return Object.entries(obj)
-            .filter(([name]) => !excludedFields.includes(name))
-            .map(([name, meta]: any) => ({
-              name,
-              type: meta.type,
-              required: meta.required,
-              source,
-            }));
-        };
-        const productFields = extract(res.data.product, "product");
-        const inventoryFields = extract(res.data.inventory, "inventory");
-        setFields([...productFields, ...inventoryFields]);
-        setAllFields(Object.keys(res.data.product).concat(Object.keys(res.data.inventory)));
-      } catch (error) {
-        console.error("Error fetching schema:", error);
-      }
-    };
-    fetchSchema();
-  }, []);
-
-
-  const handleMappingChange = (platformField: string, tallyValue: string) => {
-    setInputMapping(prev => ({
-      ...prev,
-      [platformField]: tallyValue,
-    }));
-    setMappingDirty(true);
-  };
-
-
-  // ✅ ONLY RUN ONCE
-  useEffect(() => {
-    const fetchMapping = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      try {
-        const res = await axios.get(`${apiurl}/admin/get-tally-mapping`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.data?.fieldMapping) {
-          setPreFilledFields(res.data.fieldMapping);
-        }
-      } catch (err) {
-        console.error("Error fetching mapping", err);
-      }
-    };
-    fetchMapping();
-  }, []);
-
-
-  // Save mapping to backend only when Save Mapping is clicked
-  const handleSaveMapping = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      if (Object.keys(inputMapping).length === 0) {
-        setStatusMessage("Please enter at least one mapping before saving.");
-        setStatusType("error");
-        return;
-      }
-
-      await axios.post(
-        `${apiurl}/admin/save-tally-mapping`,
-        { fieldMapping: inputMapping }, // ✅ send user input!
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      setMappingDirty(false);
-      setStatusMessage("Field mapping saved successfully.");
-      setNotification({ message: "Mapping saved!", type: "success" });
-      setStatusType("success");
-    } catch (err: any) {
-      console.error(err);
-      setStatusType("error");
-      if (err.response?.data?.message) {
-        setStatusMessage(err.response.data.message);
-      } else {
-        setStatusMessage("Failed to save mapping. Please try again.");
-      }
-    }
-  };
-
-
-
-  // In TallySyncPage.tsx, replace the existing handleCompanySubmit with this:
-
-  // In TallySyncPage.tsx, replace the entire handleCompanySubmit function
-
+  // ✅ Add company handler
   const handleCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setNotification(null); // Clear previous notifications
-
-    // Validate input to ensure it's not empty
     if (!companyToSave.trim()) {
       setNotification({ message: "Company name cannot be empty.", type: "error" });
       return;
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setNotification({ message: "Authentication error. Please log in again.", type: "error" });
-      return;
-    }
-
-    try {
-      const res = await axios.post(
-        `${apiurl}/admin/save-company`,
-        { companyName: companyToSave }, // Use the correct state variable
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // ✅ Use the single, unified notification system
-      setNotification({ message: res.data.message || "Company saved!", type: "success" });
-
-      // Update the UI instantly
-      setSavedCompanies(prev => [...prev, companyToSave]);
-      setSelectedCompany(companyToSave); // Set as the current selection
-      setCompanyToSave(""); // Clear the input field
-
-    } catch (err: any) {
-      const message = err.response?.data?.message || "Failed to save company.";
-      // ✅ Use the single, unified notification system for errors
-      setNotification({ message, type: "error" });
-    }
-  };
-
-
-  // Function to trigger sync (reuse handleSync logic, but without needing a form event)
-  const triggerSync = async () => {
-    setSyncing(true);
-    setSyncResult(null);
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        `${apiurl}/admin/tallysync`,
-        {
-          port,
-          fieldMapping,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
+        `${apiurl}/admin/save-company`,
+        { companyName: companyToSave },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      setSyncResult({ success: true, message: "Sync completed successfully!", details: res.data });
-      setLastSyncTime(new Date());
-      setLastSyncStatus("success");
+      setNotification({ message: "✅ Company saved successfully!", type: "success" });
+      setSavedCompanies(prev => [...prev, companyToSave]);
+      setSelectedCompany(companyToSave);
+      setCompanyToSave("");
     } catch (err: any) {
-      setSyncResult({ success: false, message: err.response?.data?.message || "Sync failed. Please try again." });
-      setLastSyncTime(new Date());
-      setLastSyncStatus("error");
-    } finally {
-      setSyncing(false);
+      const msg = err.response?.data?.message || "Error saving company.";
+      setNotification({ message: msg, type: "error" });
     }
   };
 
-  // Set up the interval on mount, clean up on unmount
+  // ✅ Copy token to clipboard
+  const copyTokenToClipboard = () => {
+    navigator.clipboard.writeText(authToken).then(() => {
+      setNotification({ message: "✅ Token copied to clipboard!", type: "success" });
+    });
+  };
+
+  // ✅ Auto-clear notifications
   useEffect(() => {
-    // Trigger sync immediately on mount
-    triggerSync();
-
-    // Set up interval for every 5 minutes
-    intervalRef.current = setInterval(triggerSync, 5 * 60 * 1000);
-
-    // Clean up interval on unmount
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-    // Only run on mount/unmount, not on every render
-    // eslint-disable-next-line
-  }, [port, JSON.stringify(fieldMapping)]);
-
-
-  useEffect(() => {
-    // Run this effect whenever 'notification' changes
     if (notification) {
-      // Set a timer to clear the notification after 3 seconds (3000ms)
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 3000);
-
-      // Cleanup: clear the timer if a new notification arrives or the component unmounts
+      const timer = setTimeout(() => setNotification(null), 5000);
       return () => clearTimeout(timer);
     }
   }, [notification]);
 
+  // ✅ Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // ✅ Status indicator component
+  const StatusIndicator = ({ status }: { status: "online" | "offline" | "checking" }) => {
+    const getStatusColor = () => {
+      switch (status) {
+        case 'online': return 'bg-green-500';
+        case 'offline': return 'bg-red-500';
+        case 'checking': return 'bg-yellow-500 animate-pulse';
+        default: return 'bg-gray-500';
+      }
+    };
+
+    const getStatusText = () => {
+      switch (status) {
+        case 'online': return 'Online';
+        case 'offline': return 'Offline';
+        case 'checking': return 'Checking...';
+        default: return 'Unknown';
+      }
+    };
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className={`w-3 h-3 rounded-full ${getStatusColor()}`}></div>
+        <span className="text-sm font-medium">{getStatusText()}</span>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 to-white flex flex-col items-center py-0 px-0">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col items-center py-6">
       <AdminNavbar active="tallysync" />
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-lg p-8 border border-gray-100 mt-4">
+      
+      {/* Notification */}
+      {notification && (
+        <div
+          className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2 ${
+            notification.type === 'success' ? 'bg-green-600' :
+            notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+          } text-white`}
+        >
+          {notification.type === 'success' && '✅'}
+          {notification.type === 'error' && '❌'}
+          {notification.type === 'info' && 'ℹ️'}
+          {notification.message}
+        </div>
+      )}
 
-        {/* --- Unified Notification Display --- */}
-        {/* This single block replaces the old syncResult and status messages */}
-        {/* This new version will float on top of the screen */}
-        {notification && (
-          <div
-            className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg text-sm font-semibold 
-              ${notification.type === 'success' ? 'bg-green-600 text-white' :
-                notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
-              }`}
-          >
-            {notification.message}
+      <div className="w-full max-w-6xl space-y-6">
+        {/* Header Section with 2-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Main Controls */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">TallySync Agent</h1>
+              <p className="text-gray-600">
+                Connect with your Tally Agent to sync company and stock data
+              </p>
+            </div>
+
+            {/* Agent Status & Token */}
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm">
+                    <div className="text-gray-600">Agent Status</div>
+                    <StatusIndicator status={agentStatus} />
+                  </div>
+                </div>
+                <button
+                  onClick={checkAgentStatus}
+                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {/* Auth Token Section */}
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-yellow-800">Authentication Token</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowToken(!showToken)}
+                      className="text-xs text-yellow-700 hover:text-yellow-900"
+                    >
+                      {showToken ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      onClick={copyTokenToClipboard}
+                      className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div className="text-xs font-mono bg-white p-2 rounded border break-all">
+                  {showToken ? authToken : '••••••••••••••••••••••••••••••'}
+                </div>
+                <div className="text-xs text-yellow-700 mt-2">
+                  Use this token to verify your Tally Agent
+                </div>
+              </div>
+            </div>
+
+            {/* Sync Controls */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Tally Port</label>
+                  <input
+                    value={port}
+                    onChange={e => setPort(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="9000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Company</label>
+                  <select
+                    value={selectedCompany}
+                    onChange={e => setSelectedCompany(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+                  >
+                    <option value="">-- Select a Company --</option>
+                    {savedCompanies.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={runAgentSync}
+                disabled={isSyncing || agentStatus === "offline"}
+                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {isSyncing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Sync Now
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Right Column - Auto Sync & Add Company */}
+          <div className="space-y-6">
+            {/* Auto Sync Controls */}
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+              <h2 className="text-xl font-semibold mb-4 text-center">Automatic Background Sync</h2>
+              <div className="space-y-4">
+                <div className="text-center">
+                  {!isAutoSyncing ? (
+                    <button
+                      onClick={handleStartAutoSync}
+                      disabled={agentStatus === "offline"}
+                      className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Start Auto-Sync
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleStopAutoSync}
+                      className="w-full px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                      </svg>
+                      Stop Auto-Sync
+                    </button>
+                  )}
+                </div>
+                
+                {lastSync && (
+                  <div className={`p-3 rounded-lg text-center ${
+                    lastSync.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                  }`}>
+                    <div className="text-sm font-medium">
+                      Last sync: {lastSync.time.toLocaleTimeString()}
+                    </div>
+                    <div className="text-xs">
+                      Status: {lastSync.type === "success" ? "✅ Success" : "❌ Failed"}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-sm text-gray-600 text-center">
+                  Auto-sync runs every 5 minutes. Keep this page open for continuous synchronization.
+                </p>
+              </div>
+            </div>
+
+            {/* Add Company Form */}
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+              <h2 className="text-xl font-bold mb-4 text-center">Add New Company</h2>
+              <form onSubmit={handleCompanySubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter company name as it appears in Tally"
+                    value={companyToSave}
+                    onChange={(e) => setCompanyToSave(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Save Company
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Response Display */}
+        {syncResponse && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Sync Command Sent Successfully
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900 border-b pb-2">Request Information</h3>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Request ID:</span>
+                    <span className="text-sm font-mono text-blue-600">{syncResponse.requestId}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Status:</span>
+                    <span className="text-sm font-semibold text-green-600">Command Sent</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Action:</span>
+                    <span className="text-sm font-semibold text-purple-600">{syncResponse.command.action}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Command Details */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900 border-b pb-2">Command Details</h3>
+                
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-sm font-medium text-gray-600 mb-1">Company</div>
+                    <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.companyName}</div>
+                  </div>
+                  
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-sm font-medium text-gray-600 mb-1">Port</div>
+                    <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.port}</div>
+                  </div>
+                  
+                  <div className="p-3 bg-gray-100 rounded-lg">
+                    <div className="text-sm font-medium text-gray-600 mb-1">Signature</div>
+                    <div className="text-xs font-mono text-gray-700 break-all">{syncResponse.command.signature}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Next Steps */}
+            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                What happens next?
+              </h4>
+              <ul className="text-sm text-green-800 space-y-1 list-disc list-inside">
+                <li>Your Tally Agent has received the sync command</li>
+                <li>The agent will now connect to Tally and fetch the data</li>
+                <li>Data will be processed and synchronized automatically</li>
+                <li>Check your Tally Agent logs for detailed progress</li>
+              </ul>
+            </div>
           </div>
         )}
 
-        <h1 className="text-2xl font-bold mb-2 text-gray-900 text-center">Tally Product Sync</h1>
-        <p className="text-gray-600 mb-6 text-center max-w-xl mx-auto">
-          Configure your Tally connection and field mappings, then choose to sync manually or automatically.
-        </p>
-
-        {/* --- Updated Instructions --- */}
-        <div className="mb-8 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <svg className="w-8 h-8 text-blue-400 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" /></svg>
-          <div className="text-blue-900 text-sm">
-            <span className="font-semibold">How to Use:</span>
-            <ol className="list-decimal list-inside mt-1 space-y-1">
-              <li>Enter your Tally port and select your pre-saved company.</li>
-              <li>Click <span className="font-semibold">Sync Now</span> for a single, immediate product sync.</li>
-              <li>Click <span className="font-semibold">Start Auto-Sync</span> to begin syncing automatically every 5 minutes. You must keep this page open.</li>
-            </ol>
-          </div>
-        </div>
-
-        {/* --- New Sync Control Panel --- */}
-        <div className="w-full flex flex-col sm:flex-row gap-4 mb-8 items-end justify-center p-6 bg-gray-50 rounded-xl border">
-          {/* Port Input */}
-          <div className="flex-1 w-full sm:w-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tally Port</label>
-            <input
-              type="text"
-              value={port}
-              onChange={e => setPort(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-transparent outline-none"
-              placeholder="9000"
-              required
-            />
-          </div>
-
-          {/* Company Selection Dropdown */}
-          <div className="flex-1 w-full sm:w-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Company to Sync</label>
-            <select
-              value={selectedCompany}
-              onChange={e => setSelectedCompany(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-transparent outline-none"
-              required
-            >
-              <option value="" disabled>-- Select a Company --</option>
-              {savedCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          {/* Manual Sync Button */}
-          <button
-            onClick={() => runSync()}
-            disabled={isSyncing || isAutoSyncing}
-            className="px-6 py-2 rounded-lg bg-gray-800 text-white font-semibold shadow hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
-          >
-            {isSyncing ? "Syncing..." : "Sync Now"}
-          </button>
-        </div>
-
-        {/* --- Auto-Sync Controls & Status --- */}
-        <div className="text-center border-t pt-8">
-          <h2 className="text-xl font-semibold text-gray-800">Automatic Background Sync</h2>
-          <p className="text-sm text-gray-600 mb-4">Keeps this page open to sync automatically every 5 minutes.</p>
-          {!isAutoSyncing ? (
-            <button onClick={handleStartAutoSync} disabled={isSyncing} className="px-8 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-60 text-lg">
-              Start Auto-Sync
-            </button>
-          ) : (
-            <button onClick={handleStopAutoSync} className="px-8 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition text-lg">
-              Stop Auto-Sync
-            </button>
-          )}
-          {/* New Last Sync Status */}
-          {lastSync && (
-            <p className={`text-sm mt-4 font-medium ${lastSync.type === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
-              Last sync attempt at {lastSync.time.toLocaleTimeString()} was a {lastSync.type}.
+        {/* Help Section */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-yellow-900 mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            Need Help?
+          </h3>
+          <div className="text-sm text-yellow-800 space-y-2">
+            <p><strong>Agent Offline?</strong> Make sure:</p>
+            <ul className="list-disc list-inside space-y-1 ml-4">
+              <li>TallySync Agent desktop app is running</li>
+              <li>Agent is properly registered with your backend</li>
+              <li>Your authentication token is valid</li>
+              <li>Backend server is accessible</li>
+            </ul>
+            <p className="mt-2">
+              <strong>Note:</strong> Copy the authentication token above and use it to verify your Tally Agent.
             </p>
-          )}
+          </div>
         </div>
       </div>
-
-      {/* --- KEPT YOUR EXISTING FORMS --- */}
-      {/* Save Company Form */}
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-lg p-8 border border-gray-100 mt-8">
-        <h2 className="text-2xl font-bold mb-4 text-center">Add a Tally Company</h2>
-        <form onSubmit={handleCompanySubmit} className="max-w-md mx-auto">
-          <input
-            type="text"
-            placeholder="Enter Company Name to Save"
-            value={companyToSave}
-            onChange={(e) => setCompanyToSave(e.target.value)}
-            required
-            className="w-full p-3 mb-4 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition"
-          >
-            Save Company
-          </button>
-        </form>
-      </div>
-
-      {/* <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Field Mapping Table</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-300 text-sm">
-            <thead>
-              <tr className="bg-gray-100 text-left">
-                <th className="px-4 py-2 border">Field Name</th>
-                <th className="px-4 py-2 border">Mapped To (Pre-filled)</th>
-                <th className="px-4 py-2 border">Tally Field (Your Input)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((field, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 border">{field.name}</td>
-
-                  {/* Mapped To: read-only from preFilledFields 
-                  <td className="px-4 py-2 border text-gray-600">
-                    {preFilledFields[field.name] || "—"}
-                  </td>
-
-                  {/* Editable input box 
-                  <td className="px-4 py-2 border">
-                    <input
-                      type="text"
-                      className="w-full px-2 py-1 border rounded"
-                      placeholder="Enter Tally field"
-                      value={inputMapping[field.name] || ""}
-                      onChange={(e) => handleMappingChange(field.name, e.target.value)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={handleSaveMapping}
-              disabled={!mappingDirty}
-              className="px-4 py-2 rounded bg-blue-600 text-white font-semibold shadow hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              Save Mapping
-            </button>
-          </div>
-          {statusMessage && (
-            <p className={`mt-3 text-sm ${statusType === "success" ? "text-green-600" : "text-red-600"}`}>
-              {statusMessage}
-            </p>
-          )}
-        </div>
-      </div> */}
-
     </div>
   );
 }
-
