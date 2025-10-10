@@ -52,7 +52,7 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
       try {
         const endpoint = userType === 'admin'
           ? `/admin/wallpaper?device=${isMobile ? 'mobile' : 'desktop'}`
-          : `/retailer/wallpaper?device=${isMobile ? 'mobile' : 'desktop'}`;
+          : `/admin/wallpaper?device=${isMobile ? 'mobile' : 'desktop'}`;
         const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });

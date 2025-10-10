@@ -2,9 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
-import { FaPen, FaArrowLeft } from 'react-icons/fa';
+import { FaPen, FaArrowLeft, FaTrash, FaPlus, FaTimes, FaSave, FaShoppingCart } from 'react-icons/fa';
 import { toast } from "react-hot-toast";
-
 import { jwtDecode } from 'jwt-decode';
 
 export default function ProductDetailsPage({ userType }: { userType: 'admin' | 'retailer' }) {
@@ -20,7 +19,12 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
   const [editFields, setEditFields] = useState<any>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingFields, setPendingFields] = useState<any>(null);
-const apiurl = process.env.NEXT_PUBLIC_APIURL;
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const apiurl = process.env.NEXT_PUBLIC_APIURL;
+
   // Get the correct dashboard path based on user type
   const getDashboardPath = () => {
     return userType === 'admin' ? '/admin-dashboard' : '/retailer-dashboard';
@@ -57,7 +61,6 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
         if (userType === "admin") {
           found = res.data.find((p: any) => p.product_id === productId);
         } else if (userType === "retailer") {
-          // Retailer: find and flatten
           const offers = res.data.offers || [];
           const entry = (res.data.retailerproducts || []).find((entry: any) => entry.product.product_id === productId);
           if (entry) {
@@ -71,6 +74,7 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
         }
         setProduct(found);
       } catch (err) {
+        console.error('Error fetching product:', err);
         setProduct(null);
       }
       setLoading(false);
@@ -87,6 +91,121 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
     return `${apiurl}${img}`;
   };
 
+  // Handle image file selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const fileArray = Array.from(files);
+    setNewImages(prev => [...prev, ...fileArray]);
+
+    const previewPromises = fileArray.map(file => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(previewPromises).then(previews => {
+      setImagePreviews(prev => [...prev, ...previews]);
+    });
+
+    e.target.value = '';
+  };
+
+  // Remove new image before upload
+  const removeNewImage = (index: number) => {
+    setNewImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Remove existing image
+  const removeExistingImage = async (imageUrl: string, index: number) => {
+    if (!product || !editing || userType !== 'admin') return;
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      const updatedImages = product.images.filter((_: any, i: number) => i !== index);
+      setProduct({ ...product, images: updatedImages });
+      setEditFields({ ...editFields, images: updatedImages });
+
+      await axios.post(
+        `${apiurl}/product/update/${product.product_id}`,
+        { images: updatedImages },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success('Image removed successfully!');
+    } catch (error) {
+      console.error('Error removing image:', error);
+      toast.error('Failed to remove image');
+    }
+  };
+
+  // Upload new images
+  const uploadAndUpdateProduct = async () => {
+    if (newImages.length === 0) return;
+
+    setUploadingImages(true);
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      
+      newImages.forEach((file, index) => {
+        formData.append('images', file);
+      });
+      
+      formData.append('product_id', product.product_id);
+
+      const response = await axios.post(
+        `${apiurl}/product/upload-images`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      if (response.data.success && response.data.images) {
+        const updatedImages = [...(product.images || []), ...response.data.images];
+        
+        setProduct({ ...product, images: updatedImages });
+        setEditFields({ ...editFields, images: updatedImages });
+        
+        setNewImages([]);
+        setImagePreviews([]);
+        toast.success(`Successfully uploaded ${response.data.images.length} images!`);
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload images');
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  // Delete product
+  const handleDeleteProduct = async () => {
+    if (!product) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${apiurl}/product/delete/${product.product_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      toast.success('Product deleted successfully!');
+      router.push(getDashboardPath());
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete product');
+    }
+  };
+
   const handleAddToCart = () => {
     if (!product) return;
     const maxQty = product.inventory?.quantity || 1;
@@ -94,7 +213,6 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
     let updatedCart = [...cart];
     const idx = updatedCart.findIndex((p) => p.product_id === product.product_id);
     if (idx !== -1) {
-      // Already in cart, update quantity
       const prevQty = updatedCart[idx].cartQty || 1;
       const newQty = Math.min(prevQty + qty, maxQty);
       updatedCart[idx] = { ...updatedCart[idx], cartQty: newQty };
@@ -121,14 +239,27 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
     setEditFields((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
-    // Only send changed fields
+  const handleSave = async () => {
+    if (newImages.length > 0) {
+      await uploadAndUpdateProduct();
+    }
+
     const changed: any = {};
     Object.keys(editFields).forEach((key) => {
-      if (editFields[key] !== product[key]) changed[key] = editFields[key];
+      if (key !== 'images' && editFields[key] !== product[key]) {
+        changed[key] = editFields[key];
+      }
     });
-    setPendingFields(changed);
-    setShowConfirm(true);
+
+    if (Object.keys(changed).length > 0) {
+      setPendingFields(changed);
+      setShowConfirm(true);
+    } else if (newImages.length === 0) {
+      toast('No changes to save');
+      setEditing(false);
+    } else {
+      setEditing(false);
+    }
   };
 
   const confirmSave = async () => {
@@ -139,11 +270,15 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
       await axios.post(`${apiurl}/product/update/${product.product_id}`, pendingFields, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      toast.success('Product updated!');
+      toast.success('Product updated successfully!');
       setEditing(false);
       setPendingFields(null);
-      // Refresh product
-      const res = await axios.get(`${apiurl}/product/all`, { headers: { Authorization: `Bearer ${token}` } });
+      
+      // Refresh product data
+      const endpoint = userType === "admin" ? "/product/all" : "/product/all-retailer";
+      const res = await axios.get(`${apiurl}${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const found = res.data.find((p: any) => p.product_id === productId);
       setProduct(found);
     } catch (err) {
@@ -151,310 +286,447 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
     }
   };
 
-  if (loading) return <div className="p-8">Loading...</div>;
-  if (!product) return <div className="p-8 text-red-500">Product not found.</div>;
+  const cancelEdit = () => {
+    setEditing(false);
+    setNewImages([]);
+    setImagePreviews([]);
+  };
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+    </div>
+  );
+  
+  if (!product) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-2xl font-semibold text-gray-900 mb-2">Product Not Found</div>
+        <button
+          onClick={handleBackToDashboard}
+          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen relative z-0 py-4 px-1 sm:px-4 flex flex-col items-center">
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-white via-gray-50 to-gray-100" />
-      <div className="w-full max-w-5xl mb-4">
-        <div className="flex items-center gap-4 mb-2">
-          <button
-            onClick={handleBackToDashboard}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <FaArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Back to {userType === 'admin' ? 'Admin' : 'Retailer'} Dashboard</span>
-          </button>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Product Details</h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-1">
-          {userType === 'admin' ? 'Use the edit button to update product details.' : 'View product information and add to cart.'}
-        </p>
-      </div>
-      <div className="w-full max-w-5xl bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg p-0 flex flex-col md:flex-row gap-6 md:gap-10">
-        {/* Images */}
-        <div className="flex flex-col items-center md:w-1/2 w-full p-4 sm:p-6 bg-white">
-          {product.images && product.images.length > 0 ? (
-            <>
-              <a
-                href={getImageUrl(product.images[imgIdx])}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <img
-                  src={getImageUrl(product.images[imgIdx])}
-                  alt={product.name}
-                  className="w-full max-w-xs sm:max-w-md h-56 sm:h-80 object-contain rounded-xl mb-4 border bg-white cursor-pointer transition-shadow hover:shadow-xl"
-                />
-              </a>
-              {product.images.length > 1 && (
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {product.images.map((img: string, idx: number) => (
-                    <img
-                      key={idx}
-                      src={getImageUrl(img)}
-                      alt={product.name}
-                      className={`w-12 h-12 sm:w-16 sm:h-16 object-cover rounded cursor-pointer border ${imgIdx === idx ? "border-gray-900" : "border-gray-200"} transition-shadow hover:shadow-md`}
-                      onClick={() => setImgIdx(idx)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full max-w-xs sm:max-w-md h-56 sm:h-80 bg-gray-200 rounded-xl flex items-center justify-center text-gray-400">No Image</div>
-          )}
-        </div>
-        {/* Details */}
-        <div className="md:w-1/2 w-full flex flex-col gap-4 p-4 sm:p-6 bg-gradient-to-br from-white to-gray-50">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            {editing ? (
-              <input value={editFields.name} onChange={e => handleFieldChange('name', e.target.value)} className="text-2xl sm:text-4xl font-bold mb-2 border px-2 py-1 rounded text-gray-900" />
-            ) : (
-              <h2 className="text-2xl sm:text-4xl font-bold mb-2 text-gray-900">{product.name}</h2>
-            )}
-            {!editing && userType === 'admin' && (
+    <div className="min-h-screen bg-gray-50 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
               <button
-                onClick={handleEditClick}
-                className="p-3 rounded-full bg-gray-600 hover:bg-blue-700 shadow-lg transition flex items-center justify-center group"
-                title="Edit Product"
+                onClick={handleBackToDashboard}
+                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition"
               >
-                <FaPen className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-                <span className="sr-only">Edit</span>
+                <FaArrowLeft className="w-4 h-4" />
+                <span>Back to Dashboard</span>
               </button>
+              <div className="h-6 w-px bg-gray-300"></div>
+              <h1 className="text-2xl font-bold text-gray-900">Product Details</h1>
+            </div>
+            
+            {userType === 'admin' && !editing && (
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleEditClick}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <FaPen className="w-4 h-4" />
+                  <span>Edit Product</span>
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                >
+                  <FaTrash className="w-4 h-4" />
+                  <span>Delete</span>
+                </button>
+              </div>
             )}
           </div>
-          <div className="text-lg sm:text-xl text-blue-700 mb-2">{product.short_description}</div>
-          <div className="text-gray-600 mb-2 text-base sm:text-lg">{product.long_description}</div>
-          <div className="flex flex-wrap gap-4 sm:gap-6 mb-2 text-base sm:text-lg">
-            {/* For retailers, only show fields that exist in the product object. For admin, show all as before. */}
-            {(userType === 'admin' || product.sku !== undefined) && (
-              <div>
-                <span className="font-semibold text-gray-700">SKU:</span>
-                {editing && userType === 'admin' ? (
-                  <input
-                    type="text"
-                    value={editFields.sku}
-                    disabled
-                    className="border rounded px-2 py-1 ml-2 w-24 sm:w-32 bg-gray-100 text-gray-500 cursor-not-allowed"
+          <p className="mt-2 text-sm text-gray-600">
+            {userType === 'admin' ? 'Manage product details and inventory' : 'View product information'}
+          </p>
+        </div>
+
+        {/* Main Content */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6">
+            {/* Images Section */}
+            <div className="space-y-6">
+              {/* Main Image */}
+              <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
+                {(product.images && product.images.length > 0) || imagePreviews.length > 0 ? (
+                  <img
+                    src={getImageUrl((imagePreviews.length > 0 ? imagePreviews[0] : product.images[imgIdx]))}
+                    alt={product.name}
+                    className="w-full h-80 object-contain rounded-lg"
                   />
                 ) : (
-                  <span className="text-gray-800">{product.sku}</span>
+                  <div className="w-full h-80 flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <FaTimes className="w-8 h-8" />
+                      </div>
+                      <p>No Image Available</p>
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
-            {(userType === 'admin' || product.brand !== undefined) && (
-              <div><span className="font-semibold text-gray-700">Brand:</span> {editing && userType === 'admin' ? (
-                <input type="text" value={editFields.brand} onChange={e => handleFieldChange('brand', e.target.value)} className="border rounded px-2 py-1 ml-2 w-24 sm:w-32" />
-              ) : <span className="text-gray-800">{product.brand}</span>}</div>
-            )}
-            {(userType === 'admin' || product.category !== undefined) && (
-              <div><span className="font-semibold text-gray-700">Category:</span> {editing && userType === 'admin' ? (
-                <input type="text" value={editFields.category} onChange={e => handleFieldChange('category', e.target.value)} className="border rounded px-2 py-1 ml-2 w-24 sm:w-32" />
-              ) : <span className="text-gray-800">{product.category}</span>}</div>
-            )}
-            {(userType === 'admin' || product.subcategory !== undefined) && (
-              <div><span className="font-semibold text-gray-700">Subcategory:</span> {editing && userType === 'admin' ? (
-                <input type="text" value={editFields.subcategory} onChange={e => handleFieldChange('subcategory', e.target.value)} className="border rounded px-2 py-1 ml-2 w-24 sm:w-32" />
-              ) : <span className="text-gray-800">{product.subcategory}</span>}</div>
-            )}
-          </div>
-          {(userType === 'admin' || product.specification !== undefined) && (
-            <div className="mb-2 text-base sm:text-lg"><span className="font-semibold text-gray-700">Specification:</span> <span className="text-gray-800">{product.specification}</span></div>
-          )}
-          <div className="mb-2 text-base sm:text-lg">
-            <span className="font-semibold text-gray-700">Price:</span>
-            {editing && userType === 'admin' ? (
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={editFields.price}
-                onChange={e => handleFieldChange('price', Number(e.target.value))}
-                className="border rounded px-2 py-1 ml-2 w-24 sm:w-32"
-              />
-            ) : (
-              <span className="text-2xl sm:text-3xl font-bold text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</span>
-            )}
-          </div>
-          
-          {/* Offer Section */}
-          {product.offers && product.offers.length > 0 && (
-            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="text-lg font-semibold text-green-800 mb-2">Available Offers</div>
-              <ul className="space-y-2">
-                {product.offers.map((offer: any) => (
-                  <li key={offer._id || offer.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="font-semibold text-gray-800">{offer.title}</span>
-                    <span className="text-green-600 font-semibold">
-                      {offer.offer_type === 'percentage'
-                        ? `${offer.offer_value}% off`
-                        : offer.offer_type === 'flat'
-                        ? `₹${offer.offer_value} off`
-                        : offer.offer_value}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      ({offer.valid_from?.slice(0,10)} to {offer.valid_to?.slice(0,10)})
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {/* Single Offer Price Section (if only one offer, show offer price breakdown) */}
-          {product.offers && product.offers.length === 1 && (
-            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg font-semibold text-green-800">Special Offer!</span>
-                <span className="px-2 py-1 bg-green-600 text-white text-xs font-bold rounded-full">
-                  {product.offers[0].offer_type === 'percentage' ? `${product.offers[0].offer_value}% OFF` : `₹${product.offers[0].offer_value} OFF`}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div>
-                  <span className="text-sm text-gray-600 line-through">Original Price: ₹{product.price?.toFixed(2) || '0.00'}</span>
-                  <div className="text-xl font-bold text-green-700">
-                    Offer Price: ₹{(() => {
-                      const offer = product.offers[0];
-                      if (offer.offer_type === 'percentage') {
-                        const discount = (product.price * offer.offer_value) / 100;
-                        return (product.price - discount).toFixed(2);
-                      } else {
-                        return Math.max(0, product.price - offer.offer_value).toFixed(2);
-                      }
-                    })()}
-                  </div>
+
+              {/* Image Thumbnails */}
+              {(product.images && product.images.length > 0) || imagePreviews.length > 0 ? (
+                <div className="grid grid-cols-4 gap-3">
+                  {/* Existing Images */}
+                  {product.images && product.images.map((img: string, idx: number) => (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={getImageUrl(img)}
+                        alt={`${product.name} ${idx + 1}`}
+                        className={`w-full h-20 object-cover rounded-lg cursor-pointer border-2 ${
+                          imgIdx === idx ? "border-blue-500" : "border-transparent"
+                        }`}
+                        onClick={() => setImgIdx(idx)}
+                      />
+                      {editing && userType === 'admin' && (
+                        <button
+                          onClick={() => removeExistingImage(img, idx)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <FaTimes className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {/* New Image Previews */}
+                  {imagePreviews.map((preview, idx) => (
+                    <div key={`new-${idx}`} className="relative group">
+                      <img
+                        src={preview}
+                        alt={`New image ${idx + 1}`}
+                        className="w-full h-20 object-cover rounded-lg border-2 border-blue-300"
+                      />
+                      {editing && userType === 'admin' && (
+                        <button
+                          onClick={() => removeNewImage(idx)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <FaTimes className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div className="text-sm text-green-600">
-                  <div>You Save: ₹{(() => {
-                    const offer = product.offers[0];
-                    if (offer.offer_type === 'percentage') {
-                      return ((product.price * offer.offer_value) / 100).toFixed(2);
-                    } else {
-                      return offer.offer_value.toFixed(2);
-                    }
-                  })()}</div>
-                </div>
-              </div>
-              {product.offers[0].valid_to && (
-                <div className="mt-2 text-xs text-green-600">
-                  Valid until: {new Date(product.offers[0].valid_to).toLocaleDateString()}
+              ) : null}
+
+              {/* Image Upload Section */}
+              {editing && userType === 'admin' && (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    className="flex flex-col items-center justify-center cursor-pointer"
+                  >
+                    <FaPlus className="w-8 h-8 text-gray-400 mb-2" />
+                    <span className="text-sm font-medium text-gray-600">Add Images</span>
+                    <span className="text-xs text-gray-500">Click or drag and drop</span>
+                  </label>
+                  
+                  {newImages.length > 0 && (
+                    <div className="mt-4">
+                      <button
+                        onClick={uploadAndUpdateProduct}
+                        disabled={uploadingImages}
+                        className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                      >
+                        {uploadingImages ? 'Uploading...' : `Upload ${newImages.length} Image(s)`}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-          
-          <div className="mb-2 text-base sm:text-lg">
-            <span className="font-semibold text-gray-700">Available Quantity:</span>
-            {editing && userType === 'admin' ? (
-              <input
-                type="number"
-                min={0}
-                value={editFields.quantity}
-                onChange={e => handleFieldChange('quantity', Number(e.target.value))}
-                className="border rounded px-2 py-1 ml-2 w-24 sm:w-32"
-              />
-            ) : (
-              <span className="text-gray-800">{product.inventory?.quantity || 0}</span>
-            )}
-          </div>
-          <div className="mb-2 text-base sm:text-lg">
-            <span className="font-semibold text-gray-700">Batch No:</span>
-            {editing && userType === 'admin' ? (
-              <input
-                type="text"
-                value={editFields.batch_no}
-                onChange={e => handleFieldChange('batch_no', e.target.value)}
-                className="border rounded px-2 py-1 ml-2 w-24 sm:w-32"
-              />
-            ) : (
-              <span className="text-gray-800">{product.inventory?.batch_no || '-'}</span>
-            )}
-          </div>
-          <div className="mb-2 text-base sm:text-lg">
-            <span className="font-semibold text-gray-700">Expiry Date:</span>
-            {editing && userType === 'admin' ? (
-              <input
-                type="date"
-                value={editFields.expiry_date}
-                onChange={e => handleFieldChange('expiry_date', e.target.value)}
-                className="border rounded px-2 py-1 ml-2 w-40 sm:w-48"
-              />
-            ) : (
-              <span className="text-gray-800">{product.inventory?.expiry_date ? new Date(product.inventory.expiry_date).toLocaleDateString() : '-'}</span>
-            )}
-          </div>
-          {product.dimensions && (
-            <div className="mb-2 text-base sm:text-lg">
-              <span className="font-semibold text-gray-700">Dimensions:</span>
-              <span className="ml-2 text-gray-800">L: {product.dimensions.length || '-'} cm</span>
-              <span className="ml-2 text-gray-800">W: {product.dimensions.width || '-'} cm</span>
-              <span className="ml-2 text-gray-800">H: {product.dimensions.height || '-'} cm</span>
-              <span className="ml-2 text-gray-800">Wt: {product.dimensions.weight || '-'} kg</span>
+
+            {/* Product Details */}
+            <div className="space-y-6">
+              {/* Product Name */}
+              <div>
+                {editing ? (
+                  <input
+                    value={editFields.name}
+                    onChange={e => handleFieldChange('name', e.target.value)}
+                    className="w-full text-3xl font-bold text-gray-900 border-b-2 border-gray-300 pb-2 focus:outline-none focus:border-blue-500"
+                    placeholder="Product Name"
+                  />
+                ) : (
+                  <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <div className="text-lg text-gray-700 mb-2">{product.short_description}</div>
+                <div className="text-gray-600 leading-relaxed">{product.long_description}</div>
+              </div>
+
+              {/* Basic Information Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={editFields.sku}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.sku}</div>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={editFields.brand}
+                      onChange={e => handleFieldChange('brand', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.brand}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={editFields.category}
+                      onChange={e => handleFieldChange('category', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.category}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={editFields.subcategory}
+                      onChange={e => handleFieldChange('subcategory', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.subcategory}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Price Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                {editing ? (
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={editFields.price}
+                    onChange={e => handleFieldChange('price', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                ) : (
+                  <div className="text-3xl font-bold text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</div>
+                )}
+              </div>
+
+              {/* Inventory Information */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  {editing ? (
+                    <input
+                      type="number"
+                      min={0}
+                      value={editFields.quantity}
+                      onChange={e => handleFieldChange('quantity', Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.inventory?.quantity || 0}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Batch No</label>
+                  {editing ? (
+                    <input
+                      type="text"
+                      value={editFields.batch_no}
+                      onChange={e => handleFieldChange('batch_no', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">{product.inventory?.batch_no || '-'}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                  {editing ? (
+                    <input
+                      type="date"
+                      value={editFields.expiry_date}
+                      onChange={e => handleFieldChange('expiry_date', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  ) : (
+                    <div className="text-gray-900 font-medium">
+                      {product.inventory?.expiry_date ? new Date(product.inventory.expiry_date).toLocaleDateString() : '-'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Offers Section */}
+              {product.offers && product.offers.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-green-800 mb-3">Active Offers</h3>
+                  <div className="space-y-3">
+                    {product.offers.map((offer: any) => (
+                      <div key={offer._id || offer.id} className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium text-gray-800">{offer.title}</div>
+                          <div className="text-sm text-green-600 font-semibold">
+                            {offer.offer_type === 'percentage' 
+                              ? `${offer.offer_value}% OFF` 
+                              : `₹${offer.offer_value} OFF`}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {offer.valid_from?.slice(0,10)} to {offer.valid_to?.slice(0,10)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex space-x-4 pt-4">
+                {!editing ? (
+                  <>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Quantity to Add</label>
+                      <div className="flex space-x-3">
+                        <input
+                          type="number"
+                          min={1}
+                          max={product.inventory?.quantity || 1}
+                          value={cartQty}
+                          onChange={e => setCartQty(Number(e.target.value))}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={handleAddToCart}
+                          className="flex items-center space-x-2 px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition"
+                        >
+                          <FaShoppingCart className="w-4 h-4" />
+                          <span>Add to Cart</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex space-x-3 w-full">
+                    <button
+                      onClick={handleSave}
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <FaSave className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-2 mt-4">
-            {!editing && (
-              <>
-            <input
-              type="number"
-              min={1}
-              max={product.inventory?.quantity || 1}
-              value={cartQty}
-                  onChange={e => setCartQty(Number(e.target.value))}
-                  className="border rounded px-2 py-1 w-24 sm:w-32"
-                />
-          <button
-            onClick={handleAddToCart}
-                  className="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800 transition"
-          >
-            Add to Cart
-          </button>
-              </>
-            )}
-          {editing && userType === 'admin' && (
-              <>
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditing(false)}
-                  className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 font-semibold hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </>
-            )}
           </div>
         </div>
-            </div>
-      {/* Confirm Modal */}
-          {showConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">Confirm Changes</h3>
-            <p className="mb-4">Are you sure you want to save these changes?</p>
-                <div className="flex gap-4 justify-end">
+      </div>
+
+      {/* Save Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Changes</h3>
+            <p className="text-gray-600 mb-6">Are you sure you want to save these changes to the product?</p>
+            <div className="flex space-x-3">
               <button
                 onClick={confirmSave}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
                 Yes, Save
               </button>
               <button
                 onClick={() => setShowConfirm(false)}
-                className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 font-semibold hover:bg-gray-400 transition"
+                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
               >
                 Cancel
               </button>
-                </div>
-              </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Product</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete "{product.name}"? This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleDeleteProduct}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-} 
+}

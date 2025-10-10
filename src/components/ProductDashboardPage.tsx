@@ -9,6 +9,8 @@ import AdminNavbar from './AdminNavbar';
 import RetailerNavbar from './RetailerNavbar';
 import Fuse from 'fuse.js';
 import type { FuseResult } from 'fuse.js';
+import { motion } from "framer-motion";
+import { Sparkles, Image as ImageIcon } from "lucide-react";
 const apiurl = process.env.NEXT_PUBLIC_APIURL;
 
 function useIsMobile(breakpoint = 640) {
@@ -45,18 +47,22 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartModalProduct, setCartModalProduct] = useState<any>(null);
   const [cartModalQty, setCartModalQty] = useState(1);
-  const [cartPopoverPos, setCartPopoverPos] = useState<{top: number, left: number} | null>(null);
+  const [cartPopoverPos, setCartPopoverPos] = useState<{ top: number, left: number } | null>(null);
   const [filterHasOffer, setFilterHasOffer] = useState(false);
 
   // Banner state
+
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+
   const isMobile = useIsMobile();
   const device = isMobile ? 'mobile' : 'desktop';
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [bannerData, setBannerData] = useState<{ url: string | null; topText: string | null }>({ url: null, topText: null });
+  const [bannerLoading, setBannerLoading] = useState(true);
   const backendUrl = apiurl;
 
   // Add click outside handler for profile menu
   const profileMenuRef = useRef<HTMLDivElement>(null);
- 
+
   // Utility to get user-specific cart key
   const getCartKey = () => {
     try {
@@ -66,7 +72,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
         const userId = decoded?.sub || decoded?.userid || decoded?.id;
         if (userId) return `cart_${userId}`;
       }
-    } catch {}
+    } catch { }
     return 'cart';
   };
 
@@ -162,7 +168,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    
+
     if (file) {
       try {
         const text = await file.text();
@@ -188,7 +194,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           weight: row[15]?.trim() || '0',
           images: row[16]?.split(';').map((url: string) => url.trim()).filter((url: string) => url) || [],
         }));
-        const validProducts = products.filter(product => 
+        const validProducts = products.filter(product =>
           product.name && product.sku && product.brand && product.category
         );
         if (validProducts.length === 0) {
@@ -394,7 +400,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
       toast.error(error.response?.data?.message || 'Failed to add product');
     }
   };
-  
+
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
@@ -470,6 +476,61 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     return text.length > maxLength ? text.slice(0, maxLength) + '......' : text;
   };
 
+  // const getFullBannerUrl = (url: string | null) => {
+  //   if (!url) return null;
+  //   if (url.startsWith('/uploads/')) {
+  //     return backendUrl + url;
+  //   }
+  //   return url;
+  // };
+
+  useEffect(() => {
+    const fetchBanner = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setBannerLoading(false);
+        return;
+      }
+
+      try {
+        setBannerLoading(true);
+        const res = await axios.get(`${apiurl}/banner?device=${device}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        console.log('Banner API Response:', res.data);
+
+        // Handle response based on backend structure
+        if (res.data && typeof res.data === 'object') {
+          if (res.data.url) {
+            setBannerData({
+              url: res.data.url,
+              topText: res.data.topText || null
+            });
+          } else if (res.data.banner) {
+            // If nested under banner property
+            setBannerData({
+              url: res.data.banner.url,
+              topText: res.data.banner.topText || null
+            });
+          } else {
+            // No banner found
+            setBannerData({ url: null, topText: null });
+          }
+        } else {
+          setBannerData({ url: null, topText: null });
+        }
+      } catch (err: any) {
+        console.error('Banner fetch error:', err);
+        setBannerData({ url: null, topText: null });
+      } finally {
+        setBannerLoading(false);
+      }
+    };
+
+    fetchBanner();
+  }, [device, apiurl]);
+
   const getFullBannerUrl = (url: string | null) => {
     if (!url) return null;
     if (url.startsWith('/uploads/')) {
@@ -478,49 +539,130 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     return url;
   };
 
-  useEffect(() => {
-    const fetchBanner = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      try {
-        const res = await axios.get(`${apiurl}/admin/banner?device=${device}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setBannerUrl(res.data.url || null);
-      } catch {
-        setBannerUrl(null);
-      }
-    };
-    fetchBanner();
-  }, [device]);
+  const bannerImage = getFullBannerUrl(bannerData.url) || (isMobile ? '/mobilebanner.png' : '/banner.png');
 
-  const bannerImage = getFullBannerUrl(bannerUrl) || (isMobile ? '/mobilebanner.png' : '/banner.png');
+  // Compact time left calculator
+  const calculateTimeLeft = (validTo: string): string => {
+    if (!validTo) return 'N/A';
 
+    const now = new Date();
+    const end = new Date(validTo);
+
+    if (isNaN(end.getTime())) return 'N/A';
+
+    const diff = end.getTime() - now.getTime();
+
+    if (diff <= 0) return 'Expired';
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    if (days > 0) return `${days}d`;
+    if (hours > 0) return `${hours}h`;
+    return '<1h';
+  };
+
+  // Progress calculator
+  const calculateOfferProgress = (validFrom: string, validTo: string): number => {
+    if (!validFrom || !validTo) return 0;
+
+    const now = new Date();
+    const start = new Date(validFrom);
+    const end = new Date(validTo);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+
+    const total = end.getTime() - start.getTime();
+    const elapsed = now.getTime() - start.getTime();
+
+    if (elapsed <= 0) return 0;
+    if (elapsed >= total) return 100;
+
+    return Math.round((elapsed / total) * 100);
+  };
   return (
     <div className="min-h-screen bg-gray-50">
       {userType === 'admin' && <AdminNavbar active="products" />}
       {userType === 'retailer' && <RetailerNavbar active="products" />}
-      
+
+
       {/* Banner Section */}
-      {bannerImage && (
-        <div className="w-full bg-white border-b border-gray-200">
+      {!bannerLoading && (
+        <div className="relative w-full bg-gradient-to-br from-gray-50 via-white to-gray-100 border-b border-gray-200">
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="relative rounded-2xl overflow-hidden shadow-2xl"
+            >
+              {/* Banner Image */}
+              <div className="relative">
+                {bannerImage ? (
+                  <motion.img
+                    key={bannerImage}
+                    src={bannerImage}
+                    alt="Dashboard Banner"
+                    className="w-full h-52 sm:h-64 md:h-72 lg:h-80 object-cover rounded-2xl"
+                    initial={{ scale: 1.1 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 1.2, ease: "easeOut" }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = isMobile ? "/mobilebanner.png" : "/banner.png";
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-52 sm:h-64 md:h-72 lg:h-80 bg-gray-200 rounded-2xl">
+                    <ImageIcon className="w-10 h-10 text-gray-400" />
+                    <span className="ml-3 text-gray-500 font-medium">No Banner Available</span>
+                  </div>
+                )}
+
+                {/* Overlay Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+
+                {/* Optional Floating Sparkles */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6, duration: 0.8 }}
+                  className="absolute top-3 right-4 bg-white/10 backdrop-blur-md rounded-full p-2"
+                >
+                  <Sparkles className="text-white w-5 h-5" />
+                </motion.div>
+
+                {/* Top Text Overlay */}
+                {bannerData?.topText && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.8 }}
+                    className="absolute bottom-6 left-0 right-0 text-center px-4"
+                  >
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight drop-shadow-[0_3px_6px_rgba(0,0,0,0.6)]">
+                      {bannerData.topText}
+                    </h1>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Banner Loading State */}
+      {bannerLoading && (
+        <div className="w-full bg-gray-50 border-b border-gray-200 py-8">
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="relative w-full overflow-hidden rounded-lg">
-              <img
-                src={bannerImage}
-                alt="Admin Dashboard Banner"
-                className="w-full h-auto object-contain"
-                onError={(e) => {
-                  // Fallback to default banner if custom banner fails to load
-                  const target = e.target as HTMLImageElement;
-                  target.src = isMobile ? '/mobilebanner.png' : '/banner.png';
-                }}
-              />
+            <div className="animate-pulse">
+              <div className="h-32 bg-gray-200 rounded-lg"></div>
             </div>
           </div>
         </div>
       )}
-      
+
       {/* Main Content */}
       <div className="py-6">
         <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-8">
@@ -700,7 +842,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                   ) : (
                     <>
                       {/* Only show these fields if present in product data, in fixed order */}
-                      {['product_id','images','name','short_description','sku','brand','category','price','inventory','offers'].map((field) => {
+                      {['product_id', 'images', 'name', 'short_description', 'sku', 'brand', 'category', 'price', 'inventory', 'offers'].map((field) => {
                         if (!products.some(p => p[field] !== undefined && p[field] !== null)) return null;
                         if (field === 'product_id')
                           return <th key="product_id" className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>;
@@ -819,45 +961,120 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                         <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</td>
                         {/* Quantity */}
                         <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{product.inventory?.quantity || 0}</td>
-                        {/* Offers */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">
+                        {/* Professional Offers Section */}
+                        <td className="px-4 sm:px-6 py-4 align-top min-w-[240px]">
                           {product.offers && product.offers.length > 0 ? (
-                            <ul>
+                            <div className="space-y-3">
                               {product.offers.map((offer: any) => (
-                                <li key={offer._id || offer.id}>
-                                  <span className="font-semibold">{truncateText(offer.title, 30)}</span>
-                                  {': '}
-                                  <span className="text-green-600 font-semibold">
-                                    {offer.offer_type === 'percentage'
-                                      ? `${offer.offer_value}% off`
-                                      : offer.offer_type === 'flat'
-                                      ? `₹${offer.offer_value} off`
-                                      : offer.offer_value}
-                                  </span>
-                                  <span className="ml-2 text-xs text-gray-500">
-                                    ({offer.valid_from?.slice(0,10)} to {offer.valid_to?.slice(0,10)})
-                                  </span>
-                                </li>
+                                <div
+                                  key={offer._id || offer.id}
+                                  className=" rounded-lg p-4 hover:shadow-md transition-all duration-200 bg-white"
+                                >
+                                  {/* Offer Header */}
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-gray-800 text-sm mb-2">
+                                        {truncateText(offer.title, 30)}
+                                      </h4>
+
+                                      {/* Discount Value */}
+                                      <div className="text-lg font-bold text-gray-900">
+                                        {offer.offer_type === "percentage"
+                                          ? `${offer.offer_value}% OFF`
+                                          : offer.offer_type === "flat"
+                                            ? `₹${offer.offer_value} OFF`
+                                            : offer.offer_value}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Dates */}
+                                  <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
+                                    <span className="font-medium">{offer.valid_from?.slice(0, 10)}</span>
+                                    <span className="text-gray-400">to</span>
+                                    <span className="font-medium">{offer.valid_to?.slice(0, 10)}</span>
+                                  </div>
+
+                                  {/* Progress Bar */}
+                                  {offer.valid_from && offer.valid_to && (
+                                    <div className="mt-3">
+                                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                        <span>Progress</span>
+                                        <span>{calculateOfferProgress(offer.valid_from, offer.valid_to)}%</span>
+                                      </div>
+                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div
+                                          className="bg-gray-600 h-1.5 rounded-full transition-all duration-500"
+                                          style={{
+                                            width: `${calculateOfferProgress(offer.valid_from, offer.valid_to)}%`
+                                          }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           ) : (
-                            <span className="text-gray-400">No active offers</span>
+                            <div className="flex items-center justify-center py-6 text-gray-400">
+                              <div className="text-center">
+                                <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                                </svg>
+                                <span className="text-sm">No active offers</span>
+                              </div>
+                            </div>
                           )}
                         </td>
-                        {/* Offer Price (if Offer tab) */}
-                        {activeTab === 'Offer' && (
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm">
-                            {product.offers && product.offers.length > 0 ? (() => {
-                              const offer = product.offers[0];
-                              let offerPrice = product.price;
-                              if (offer.offer_type === 'flat') {
-                                offerPrice = product.price - offer.offer_value;
-                              } else if (offer.offer_type === 'percentage') {
-                                offerPrice = product.price * (1 - offer.offer_value / 100);
-                              }
-                              if (offerPrice < 0) offerPrice = 0;
-                              return <span className="text-green-600 font-bold">₹{offerPrice.toFixed(2)}</span>;
-                            })() : <span className="text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</span>}
+
+                        {/* Professional Offer Price Section */}
+                        {activeTab === "Offer" && (
+                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                            {product.offers && product.offers.length > 0 ? (
+                              (() => {
+                                const offer = product.offers[0];
+                                let offerPrice = product.price;
+                                let savings = 0;
+
+                                if (offer.offer_type === "flat") {
+                                  offerPrice = product.price - offer.offer_value;
+                                  savings = offer.offer_value;
+                                } else if (offer.offer_type === "percentage") {
+                                  savings = product.price * (offer.offer_value / 100);
+                                  offerPrice = product.price - savings;
+                                }
+
+                                if (offerPrice < 0) offerPrice = 0;
+
+                                return (
+                                  <div className="text-center">
+                                    {/* Final Price */}
+                                    <div className="text-xl font-bold text-gray-900 mb-1">
+                                      ₹{offerPrice.toFixed(2)}
+                                    </div>
+
+                                    {/* Original Price */}
+                                    <div className="text-sm text-gray-500 line-through mb-1">
+                                      ₹{product.price?.toFixed(2)}
+                                    </div>
+
+                                    {/* Savings */}
+                                    <div className="text-xs text-green-600 font-medium">
+                                      Save ₹{savings.toFixed(2)}
+                                    </div>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-gray-700">
+                                  ₹{product.price?.toFixed(2) || "0.00"}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Standard
+                                </div>
+                              </div>
+                            )}
                           </td>
                         )}
                         {/* Cart */}
@@ -894,7 +1111,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                     ) : (
                       <>
                         {/* Only show these fields if present in product data, in fixed order */}
-                        {['product_id','images','name','short_description','sku','brand','category','price','inventory','offers'].map((field) => {
+                        {['product_id', 'images', 'name', 'short_description', 'sku', 'brand', 'category', 'price', 'inventory', 'offers'].map((field) => {
                           if (!products.some(p => p[field] !== undefined && p[field] !== null)) return null;
                           if (field === 'product_id')
                             return <td key="product_id" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.product_id}</td>;
@@ -947,11 +1164,11 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                                           {offer.offer_type === 'percentage'
                                             ? `${offer.offer_value}% off`
                                             : offer.offer_type === 'flat'
-                                            ? `₹${offer.offer_value} off`
-                                            : offer.offer_value}
+                                              ? `₹${offer.offer_value} off`
+                                              : offer.offer_value}
                                         </span>
                                         <span className="ml-2 text-xs text-gray-500">
-                                          ({offer.valid_from?.slice(0,10)} to {offer.valid_to?.slice(0,10)})
+                                          ({offer.valid_from?.slice(0, 10)} to {offer.valid_to?.slice(0, 10)})
                                         </span>
                                       </li>
                                     ))}
@@ -1014,29 +1231,27 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                 ))}
               </tbody>
             </table>
-            
+
             {/* Pagination */}
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
               <div className="flex-1 flex justify-between sm:hidden">
                 <button
                   onClick={handlePrevPage}
                   disabled={currentPage === 1}
-                  className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                    currentPage === 1
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${currentPage === 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
                 >
                   Prev
                 </button>
                 <button
                   onClick={handleNextPage}
                   disabled={currentPage === totalPages}
-                  className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                    currentPage === totalPages
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
                 >
                   Next
                 </button>
@@ -1056,11 +1271,10 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                     <button
                       onClick={handlePrevPage}
                       disabled={currentPage === 1}
-                      className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 text-sm font-medium ${
-                        currentPage === 1
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
+                      className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 text-sm font-medium ${currentPage === 1
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-500 hover:bg-gray-50'
+                        }`}
                     >
                       <span className="sr-only">Previous</span>
                       <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -1070,11 +1284,10 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                     <button
                       onClick={handleNextPage}
                       disabled={currentPage === totalPages}
-                      className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 text-sm font-medium ${
-                        currentPage === totalPages
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
+                      className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 text-sm font-medium ${currentPage === totalPages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-500 hover:bg-gray-50'
+                        }`}
                     >
                       <span className="sr-only">Next</span>
                       <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
