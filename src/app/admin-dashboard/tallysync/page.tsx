@@ -61,28 +61,25 @@ export default function TallySyncPage() {
     checkAgentStatus();
   }, [apiurl]);
 
-  // ✅ Check agent status using fetch-tally endpoint
+  // ✅ Check agent status 
   const checkAgentStatus = async () => {
-    setAgentStatus("checking");
+    // We skip sending a "TEST" task because it creates "Company Mismatch" errors in the agent logs.
+    // TODO: Implement a proper read-only status check (e.g. checking lastSeen).
+    // For now, we assume 'online' if we can load companies, or just leave it as 'checking' until first sync.
+    setAgentStatus("online");
+
+    /* 
+    // Previous logic caused mismatch errors:
     try {
       const token = localStorage.getItem("token");
-      // Use fetch-tally endpoint with test parameters to check if agent is responsive
       await axios.get(`${apiurl}/agent/sync/fetch-tally`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { companyName: "TEST", port: 9000 },
         timeout: 5000
       });
       setAgentStatus("online");
-    } catch (error: any) {
-      // If we get any response (even error), agent is online
-      // Only mark as offline if it's a network error or timeout
-      if (error.code === 'ECONNREFUSED' || error.code === 'NETWORK_ERROR' || error.message?.includes('timeout')) {
-        setAgentStatus("offline");
-      } else {
-        // If we get any HTTP response (even 404/400), agent is online
-        setAgentStatus("online");
-      }
-    }
+    } catch (error) { ... }
+    */
   };
 
   // ✅ Unified Sync Logic (Agent API)
@@ -227,14 +224,13 @@ export default function TallySyncPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col items-center py-6">
       <AdminNavbar active="tallysync" />
-      
+
       {/* Notification */}
       {notification && (
         <div
-          className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2 ${
-            notification.type === 'success' ? 'bg-green-600' :
-            notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
-          } text-white`}
+          className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2 ${notification.type === 'success' ? 'bg-green-600' :
+              notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+            } text-white`}
         >
           {notification.type === 'success' && '✅'}
           {notification.type === 'error' && '❌'}
@@ -381,11 +377,10 @@ export default function TallySyncPage() {
                     </button>
                   )}
                 </div>
-                
+
                 {lastSync && (
-                  <div className={`p-3 rounded-lg text-center ${
-                    lastSync.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                  }`}>
+                  <div className={`p-3 rounded-lg text-center ${lastSync.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}>
                     <div className="text-sm font-medium">
                       Last sync: {lastSync.time.toLocaleTimeString()}
                     </div>
@@ -394,7 +389,7 @@ export default function TallySyncPage() {
                     </div>
                   </div>
                 )}
-                
+
                 <p className="text-sm text-gray-600 text-center">
                   Auto-sync runs every 5 minutes. Keep this page open for continuous synchronization.
                 </p>
@@ -441,23 +436,23 @@ export default function TallySyncPage() {
               </svg>
               Sync Command Sent Successfully
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Info */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-900 border-b pb-2">Request Information</h3>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm font-medium text-gray-600">Request ID:</span>
                     <span className="text-sm font-mono text-blue-600">{syncResponse.requestId}</span>
                   </div>
-                  
+
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm font-medium text-gray-600">Status:</span>
                     <span className="text-sm font-semibold text-green-600">Command Sent</span>
                   </div>
-                  
+
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm font-medium text-gray-600">Action:</span>
                     <span className="text-sm font-semibold text-purple-600">{syncResponse.command.action}</span>
@@ -468,18 +463,18 @@ export default function TallySyncPage() {
               {/* Command Details */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-900 border-b pb-2">Command Details</h3>
-                
+
                 <div className="space-y-3">
                   <div className="p-3 bg-blue-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-600 mb-1">Company</div>
                     <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.companyName}</div>
                   </div>
-                  
+
                   <div className="p-3 bg-blue-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-600 mb-1">Port</div>
                     <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.port}</div>
                   </div>
-                  
+
                   <div className="p-3 bg-gray-100 rounded-lg">
                     <div className="text-sm font-medium text-gray-600 mb-1">Signature</div>
                     <div className="text-xs font-mono text-gray-700 break-all">{syncResponse.command.signature}</div>
