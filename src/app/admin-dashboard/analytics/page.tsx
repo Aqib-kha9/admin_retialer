@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import AdminNavbar from '../../../components/AdminNavbar';
+import UniversalLoader from '../../../components/UniversalLoader';
+import { motion } from 'framer-motion';
 
 export default function Analytics() {
   const router = useRouter();
@@ -91,32 +93,38 @@ export default function Analytics() {
       {/* Main Content */}
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
           <h1 className="text-2xl font-semibold text-gray-900 mb-6">Analytics Overview</h1>
-          {loading ? (
-            <div className="text-center py-10 text-gray-500">Loading analytics...</div>
-          ) : error ? (
+          {error ? (
             <div className="text-center py-10 text-red-500">{error}</div>
-          ) : analytics ? (
+          ) : (
             <>
               {/* Stats Grid */}
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-                <div className="bg-white overflow-hidden shadow-sm rounded-lg">
-                  <div className="p-5">
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Retailers</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.allretailer?.length ?? 0}</dd>
+                {loading ? (
+                  <div className="col-span-full py-10">
+                    <UniversalLoader text="Calculating statistics..." />
                   </div>
-                </div>
-                <div className="bg-white overflow-hidden shadow-sm rounded-lg">
-                  <div className="p-5">
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Products</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.products ?? 0}</dd>
-                  </div>
-                </div>
-                <div className="bg-white overflow-hidden shadow-sm rounded-lg">
-                  <div className="p-5">
-                    <dt className="text-sm font-medium text-gray-500 truncate">Active Retailers</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.activereatailerCount ?? 0}</dd>
-                  </div>
-                </div>
+                ) : analytics ? (
+                  <>
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                      <div className="p-5">
+                        <dt className="text-sm font-medium text-gray-500 truncate">Total Retailers</dt>
+                        <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.allretailer?.length ?? 0}</dd>
+                      </div>
+                    </div>
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                      <div className="p-5">
+                        <dt className="text-sm font-medium text-gray-500 truncate">Total Products</dt>
+                        <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.products ?? 0}</dd>
+                      </div>
+                    </div>
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                      <div className="p-5">
+                        <dt className="text-sm font-medium text-gray-500 truncate">Active Retailers</dt>
+                        <dd className="mt-1 text-3xl font-semibold text-gray-900">{analytics.activereatailerCount ?? 0}</dd>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               {/* Filters */}
@@ -229,8 +237,37 @@ export default function Analytics() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredRetailers.map((retailer: any, idx: number) => (
-                          <tr key={idx}>
+                        {loading ? (
+                          <tr>
+                            <td colSpan={12} className="py-20">
+                              <UniversalLoader text="Processing retailers..." />
+                            </td>
+                          </tr>
+                        ) : filteredRetailers.length === 0 ? (
+                          <tr>
+                            <td colSpan={12} className="py-20 text-center">
+                              <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex flex-col items-center justify-center text-gray-500"
+                              >
+                                <div className="bg-gray-50 p-4 rounded-full mb-4">
+                                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                  </svg>
+                                </div>
+                                <p className="text-base font-medium text-gray-900">No matching analytics found</p>
+                                <p className="text-sm text-gray-500 mt-1">Try relaxing your filters to see more results.</p>
+                              </motion.div>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredRetailers.map((retailer: any, idx: number) => (
+                            <motion.tr 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              key={idx}
+                            >
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{retailer.userid}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{retailer.name}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{retailer.email}</td>
@@ -243,15 +280,16 @@ export default function Analytics() {
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{retailer.subscription ?? '-'}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{retailer.subscription_update ? new Date(retailer.subscription_update).toLocaleDateString() : '-'}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{getDaysLeft(retailer.subscription_update, retailer.subscription)}</td>
-                          </tr>
-                        ))}
+                          </motion.tr>
+                        ))
+                      )}
                       </tbody>
                     </table>
                   </div>
                 </div>
               </div>
             </>
-          ) : null}
+          )}
       </div>
     </div>
   );

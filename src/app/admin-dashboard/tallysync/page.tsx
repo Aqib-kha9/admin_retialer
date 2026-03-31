@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import AdminNavbar from "../../../components/AdminNavbar";
+import UniversalLoader from "../../../components/UniversalLoader";
+import { motion } from "framer-motion";
 
 type Notification = {
   message: string;
@@ -37,11 +39,14 @@ export default function TallySyncPage() {
   const [agentStatus, setAgentStatus] = useState<"online" | "offline" | "checking">("checking");
   const [authToken, setAuthToken] = useState<string>("");
   const [showToken, setShowToken] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
+  const [loading, setLoading] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // ✅ Fetch saved companies and token
   useEffect(() => {
     const fetchCompanies = async () => {
+      setLoading(true);
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
@@ -55,6 +60,8 @@ export default function TallySyncPage() {
         }
       } catch (err) {
         console.error("Error fetching companies", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchCompanies();
@@ -222,14 +229,14 @@ export default function TallySyncPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col items-center py-6">
+    <div className="min-h-screen bg-white">
       <AdminNavbar active="tallysync" />
 
       {/* Notification */}
       {notification && (
         <div
           className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2 ${notification.type === 'success' ? 'bg-green-600' :
-              notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+              notification.type === 'error' ? 'bg-red-600' : 'bg-gray-900'
             } text-white`}
         >
           {notification.type === 'success' && '✅'}
@@ -239,290 +246,330 @@ export default function TallySyncPage() {
         </div>
       )}
 
-      <div className="w-full max-w-6xl space-y-6">
-        {/* Header Section with 2-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Main Controls */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">TallySync Agent</h1>
-              <p className="text-gray-600">
-                Connect with your Tally Agent to sync company and stock data
-              </p>
-            </div>
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-6">
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">TallySync Agent</h1>
 
-            {/* Agent Status & Token */}
-            <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="text-sm">
-                    <div className="text-gray-600">Agent Status</div>
-                    <StatusIndicator status={agentStatus} />
-                  </div>
-                </div>
-                <button
-                  onClick={checkAgentStatus}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
-                >
-                  Refresh
-                </button>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full space-y-6"
+          >
+            {loading && (
+              <div className="fixed inset-0 bg-white/50 backdrop-blur-[1px] z-40 flex items-center justify-center">
+                <UniversalLoader text="Initializing sync agent..." />
               </div>
-
-              {/* Auth Token Section */}
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-yellow-800">Authentication Token</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowToken(!showToken)}
-                      className="text-xs text-yellow-700 hover:text-yellow-900"
-                    >
-                      {showToken ? 'Hide' : 'Show'}
-                    </button>
-                    <button
-                      onClick={copyTokenToClipboard}
-                      className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-                <div className="text-xs font-mono bg-white p-2 rounded border break-all">
-                  {showToken ? authToken : '••••••••••••••••••••••••••••••'}
-                </div>
-                <div className="text-xs text-yellow-700 mt-2">
-                  Use this token to verify your Tally Agent
-                </div>
-              </div>
-            </div>
-
-            {/* Sync Controls */}
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Tally Port</label>
-                  <input
-                    value={port}
-                    onChange={e => setPort(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    placeholder="9000"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Company</label>
-                  <select
-                    value={selectedCompany}
-                    onChange={e => setSelectedCompany(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-                  >
-                    <option value="">-- Select a Company --</option>
-                    {savedCompanies.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                onClick={runAgentSync}
-                disabled={isSyncing || agentStatus === "offline"}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                {isSyncing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Sync Now
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column - Auto Sync & Add Company */}
-          <div className="space-y-6">
-            {/* Auto Sync Controls */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-              <h2 className="text-xl font-semibold mb-4 text-center">Automatic Background Sync</h2>
-              <div className="space-y-4">
-                <div className="text-center">
-                  {!isAutoSyncing ? (
-                    <button
-                      onClick={handleStartAutoSync}
-                      disabled={agentStatus === "offline"}
-                      className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Start Auto-Sync
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleStopAutoSync}
-                      className="w-full px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                      </svg>
-                      Stop Auto-Sync
-                    </button>
-                  )}
-                </div>
-
-                {lastSync && (
-                  <div className={`p-3 rounded-lg text-center ${lastSync.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}>
-                    <div className="text-sm font-medium">
-                      Last sync: {lastSync.time.toLocaleTimeString()}
-                    </div>
-                    <div className="text-xs">
-                      Status: {lastSync.type === "success" ? "✅ Success" : "❌ Failed"}
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-sm text-gray-600 text-center">
-                  Auto-sync runs every 5 minutes. Keep this page open for continuous synchronization.
+            )}
+          {/* Header Section with 2-column layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column - Main Controls */}
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div className="mb-6">
+                <h2 className="text-xl font-medium text-gray-900 mb-1">Agent Connection</h2>
+                <p className="text-sm text-gray-600">
+                  Manage your connection with the Tally Agent desktop application.
                 </p>
               </div>
-            </div>
 
-            {/* Add Company Form */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-              <h2 className="text-xl font-bold mb-4 text-center">Add New Company</h2>
-              <form onSubmit={handleCompanySubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Company Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter company name as it appears in Tally"
-                    value={companyToSave}
-                    onChange={(e) => setCompanyToSave(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    required
-                  />
+              {/* Agent Status & Token */}
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm">
+                      <div className="text-gray-600 font-medium mb-1">Agent Status</div>
+                      <StatusIndicator status={agentStatus} />
+                    </div>
+                  </div>
+                  <button
+                    onClick={checkAgentStatus}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    Refresh Status
+                  </button>
                 </div>
+
+                {/* Auth Token Section */}
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Authentication Token</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowToken(!showToken)}
+                        className="text-xs text-gray-600 hover:text-gray-900 font-medium underline"
+                      >
+                        {showToken ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        onClick={copyTokenToClipboard}
+                        className="text-xs font-medium text-gray-700 hover:text-gray-900"
+                      >
+                        Copy Token
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs font-mono bg-white p-3 rounded border border-gray-200 break-all text-gray-800">
+                    {showToken ? authToken : '••••••••••••••••••••••••••••••'}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Copy this token and paste it in your Tally Agent desktop application to authorize synchronization.
+                  </div>
+                </div>
+              </div>
+
+              {/* Sync Controls */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Tally Port</label>
+                    <input
+                      value={port}
+                      onChange={e => setPort(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#A8E0D8] focus:border-transparent outline-none text-sm"
+                      placeholder="9000"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Company</label>
+                    <select
+                      value={selectedCompany}
+                      onChange={e => setSelectedCompany(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#A8E0D8] focus:border-transparent outline-none text-sm bg-white"
+                    >
+                      <option value="">-- Select a Company --</option>
+                      {savedCompanies.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <button
-                  type="submit"
-                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                  onClick={runAgentSync}
+                  disabled={isSyncing || agentStatus === "offline"}
+                  className="w-full px-6 py-2.5 bg-gray-900 text-white rounded-md font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 mt-2"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Save Company
+                  {isSyncing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Sync Now
+                    </>
+                  )}
                 </button>
-              </form>
+              </div>
+            </div>
+
+            {/* Right Column - Auto Sync & Add Company */}
+            <div className="space-y-6">
+              {/* Auto Sync Controls */}
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <div className="mb-4">
+                  <h2 className="text-xl font-medium text-gray-900 mb-1">Background Sync</h2>
+                  <p className="text-sm text-gray-600">
+                    Enable automatic synchronization to keep your data up to date.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    {!isAutoSyncing ? (
+                      <button
+                        onClick={handleStartAutoSync}
+                        disabled={agentStatus === "offline"}
+                        className="w-full px-6 py-2.5 border border-transparent rounded-md text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Start Auto-Sync
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleStopAutoSync}
+                        className="w-full px-6 py-2.5 border border-red-200 rounded-md text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                        </svg>
+                        Stop Auto-Sync
+                      </button>
+                    )}
+                  </div>
+
+                  {lastSync && (
+                    <div className={`p-3 rounded-lg border ${lastSync.type === "success" ? "bg-green-50 border-green-100 text-green-800" : "bg-red-50 border-red-100 text-red-800"
+                      }`}>
+                      <div className="text-sm font-medium flex items-center justify-between">
+                        <span>Last Sync Attempt</span>
+                        <span>{lastSync.time.toLocaleTimeString()}</span>
+                      </div>
+                      <div className="text-xs mt-1 opacity-80">
+                        Status: {lastSync.type === "success" ? "✅ Successfully completed" : "❌ Sync request failed"}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 text-center italic">
+                    Note: Auto-sync runs every 5 minutes. Please keep this browser tab open for continuous synchronization.
+                  </p>
+                </div>
+              </div>
+
+              {/* Add Company Form */}
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <div className="mb-4">
+                  <h2 className="text-xl font-medium text-gray-900 mb-1">Register Company</h2>
+                  <p className="text-sm text-gray-600">
+                    Add a company to your authorized list for synchronization.
+                  </p>
+                </div>
+
+                <form onSubmit={handleCompanySubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="As it appears in Tally"
+                      value={companyToSave}
+                      onChange={(e) => setCompanyToSave(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#A8E0D8] focus:border-transparent outline-none text-sm"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-gray-900 text-white py-2.5 px-4 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Save Company
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Response Display */}
-        {syncResponse && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          {/* Response Display */}
+          {syncResponse && (
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
+                <h2 className="text-xl font-medium text-gray-900 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Sync Command Sent
+                </h2>
+                <button
+                  onClick={() => setShowTechDetails(!showTechDetails)}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors"
+                >
+                  <svg className={`w-3 h-3 transition-transform ${showTechDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  {showTechDetails ? 'Hide Technical Details' : 'View Technical Details'}
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                {/* Visible Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Sync Company</div>
+                      <div className="text-lg font-semibold text-gray-900">{syncResponse.command.payload.companyName}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Communication Port</div>
+                      <div className="text-lg font-semibold text-gray-900">{syncResponse.command.payload.port}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Collapsible Tech Details */}
+                {showTechDetails && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-gray-50/50 rounded-xl border border-gray-100">
+                      {/* Basic Info */}
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-200 pb-2">Request Metadata</h3>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-xs text-gray-500">Internal UUID:</span>
+                            <span className="text-xs font-mono text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-100">{syncResponse.requestId}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-xs text-gray-500">Command Type:</span>
+                            <span className="text-xs font-medium text-gray-700">{syncResponse.command.action}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Security Detail */}
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-200 pb-2">Digital Signature</h3>
+                        <div className="p-3 bg-white rounded border border-gray-100">
+                          <div className="text-[10px] font-mono text-gray-400 break-all leading-relaxed">{syncResponse.command.signature}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Help Section */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Sync Command Sent Successfully
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Info */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 border-b pb-2">Request Information</h3>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-600">Request ID:</span>
-                    <span className="text-sm font-mono text-blue-600">{syncResponse.requestId}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-600">Status:</span>
-                    <span className="text-sm font-semibold text-green-600">Command Sent</span>
-                  </div>
-
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-600">Action:</span>
-                    <span className="text-sm font-semibold text-purple-600">{syncResponse.command.action}</span>
-                  </div>
-                </div>
+              Troubleshooting Connection Issues
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="space-y-3">
+                <p className="font-semibold text-gray-700">If the Agent appears Offline:</p>
+                <ul className="space-y-2 text-gray-600">
+                  <li className="flex items-start gap-2">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0"></div>
+                    Ensure the TallySync Agent desktop app is running on the computer where Tally is installed.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0"></div>
+                    Verify that the Authentication Token in the Agent app matches the one shown above.
+                  </li>
+                </ul>
               </div>
-
-              {/* Command Details */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 border-b pb-2">Command Details</h3>
-
-                <div className="space-y-3">
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-sm font-medium text-gray-600 mb-1">Company</div>
-                    <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.companyName}</div>
-                  </div>
-
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-sm font-medium text-gray-600 mb-1">Port</div>
-                    <div className="text-lg font-semibold text-blue-900">{syncResponse.command.payload.port}</div>
-                  </div>
-
-                  <div className="p-3 bg-gray-100 rounded-lg">
-                    <div className="text-sm font-medium text-gray-600 mb-1">Signature</div>
-                    <div className="text-xs font-mono text-gray-700 break-all">{syncResponse.command.signature}</div>
-                  </div>
-                </div>
+              <div className="space-y-3">
+                <p className="font-semibold text-gray-700">If Synchronization fails:</p>
+                <ul className="space-y-2 text-gray-600">
+                  <li className="flex items-start gap-2">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0"></div>
+                    Check if Tally Prime/ERP 9 is open and the specific company is loaded.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0"></div>
+                    Confirm the "Tally Port" matches the port set in Tally connectivity settings (default is 9000).
+                  </li>
+                </ul>
               </div>
             </div>
-
-            {/* Next Steps */}
-            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                What happens next?
-              </h4>
-              <ul className="text-sm text-green-800 space-y-1 list-disc list-inside">
-                <li>Your Tally Agent has received the sync command</li>
-                <li>The agent will now connect to Tally and fetch the data</li>
-                <li>Data will be processed and synchronized automatically</li>
-                <li>Check your Tally Agent logs for detailed progress</li>
-              </ul>
-            </div>
           </div>
-        )}
-
-        {/* Help Section */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-yellow-900 mb-3 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            Need Help?
-          </h3>
-          <div className="text-sm text-yellow-800 space-y-2">
-            <p><strong>Agent Offline?</strong> Make sure:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>TallySync Agent desktop app is running</li>
-              <li>Agent is properly registered with your backend</li>
-              <li>Your authentication token is valid</li>
-              <li>Backend server is accessible</li>
-            </ul>
-            <p className="mt-2">
-              <strong>Note:</strong> Copy the authentication token above and use it to verify your Tally Agent.
-            </p>
-          </div>
-        </div>
-      </div>
+        </motion.div>
     </div>
+  </div>
+
   );
 }

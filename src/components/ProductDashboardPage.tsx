@@ -10,7 +10,8 @@ import RetailerNavbar from './RetailerNavbar';
 import Fuse from 'fuse.js';
 import type { FuseResult } from 'fuse.js';
 import { motion } from "framer-motion";
-import { Sparkles, Image as ImageIcon } from "lucide-react";
+import { Sparkles, Image as ImageIcon, PackageSearch } from "lucide-react";
+import UniversalLoader from './UniversalLoader';
 const apiurl = process.env.NEXT_PUBLIC_APIURL;
 
 function useIsMobile(breakpoint = 640) {
@@ -49,6 +50,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const [cartModalQty, setCartModalQty] = useState(1);
   const [cartPopoverPos, setCartPopoverPos] = useState<{ top: number, left: number } | null>(null);
   const [filterHasOffer, setFilterHasOffer] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Banner state
 
@@ -231,6 +233,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const fetchProducts = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
+    setLoading(true);
     const endpoint =
       userType === "admin"
         ? "/product/all"
@@ -258,6 +261,8 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
       }
     } catch (err) {
       console.error('Failed to fetch products:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -878,11 +883,48 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 text-xs sm:text-sm">
-                {currentProducts.map((product) => (
-                  <tr key={product.product_id || product._id} className="hover:bg-gray-50 cursor-pointer" onClick={() => {
-                    const basePath = userType === 'admin' ? '/admin-dashboard/product' : '/retailer-dashboard/product';
-                    router.push(`${basePath}/${product.product_id || product._id}`);
-                  }}>
+                {loading ? (
+                  <tr>
+                    <td colSpan={userType === 'admin' ? 11 : 11} className="py-20">
+                      <UniversalLoader text="Scanning inventory..." />
+                    </td>
+                  </tr>
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={userType === 'admin' ? 11 : 11} className="py-24 text-center">
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex flex-col items-center justify-center text-gray-500"
+                      >
+                        <div className="bg-gray-50 p-5 rounded-full mb-5">
+                          <PackageSearch className="w-10 h-10 text-gray-300" strokeWidth={1.5} />
+                        </div>
+                        <p className="text-lg font-medium text-gray-900">No products found</p>
+                        <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">
+                          We couldn't find any products matching your current filters or search query.
+                        </p>
+                        <button
+                          onClick={resetFilters}
+                          className="mt-6 text-sm font-semibold text-gray-900 hover:underline"
+                        >
+                          Clear all filters
+                        </button>
+                      </motion.div>
+                    </td>
+                  </tr>
+                ) : (
+                  currentProducts.map((product) => (
+                    <motion.tr
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      key={product.product_id || product._id}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        const basePath = userType === 'admin' ? '/admin-dashboard/product' : '/retailer-dashboard/product';
+                        router.push(`${basePath}/${product.product_id || product._id}`);
+                      }}
+                    >
                     {userType === 'admin' ? (
                       <>
                         {/* Product ID */}
@@ -1227,8 +1269,9 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                         </td>
                       </>
                     )}
-                  </tr>
-                ))}
+                  </motion.tr>
+                ))
+              )}
               </tbody>
             </table>
 

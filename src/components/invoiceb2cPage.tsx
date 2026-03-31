@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import AdminNavbar from "./AdminNavbar";
+import RetailerNavbar from "./RetailerNavbar";
+import { motion } from "framer-motion";
 
 // Utility to convert number to words (simple version for INR)
 function numberToWords(num: number): string {
@@ -354,203 +357,209 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
   );
 
   return (
-    <div className="bg-white text-black min-h-screen custom-scrollbar relative">
-      <button
-        onClick={() => router.push(userType === 'admin' ? '/admin-dashboard/cart' : '/retailer-dashboard/cart')}
-        className="absolute top-6 left-6 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 flex items-center z-50"
-      >
-        <span className="mr-2">&#8592;</span> Back to Cart
-      </button>
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 10px; background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #bdbdbd; border-radius: 8px; }
-        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #bdbdbd #f1f1f1; }
-      `}</style>
-      <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Store/Company Info Section */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-          <div className="flex-1">
-            <h2 className="font-semibold mb-2">Store/Company Info</h2>
-            {Object.keys(invoiceData.storeInfo || {}).map((field) => (
-              <input
-                key={field}
-                className="w-full border rounded px-2 py-1 mb-2"
-                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={(invoiceData.storeInfo as any)[field]}
-                onChange={e => setInvoiceData(prev => ({
-                  ...prev,
-                  storeInfo: { ...(prev.storeInfo || {}), [field]: e.target.value }
-                }))}
-              />
-            ))}
-          </div>
-          <div className="flex flex-col items-center">
-            <label className="mb-2 font-semibold">Logo</label>
-            {logoPreview || invoiceData.logo ? (
-              <img src={logoPreview || invoiceData.logo} alt="Logo" className="w-24 h-24 object-contain border rounded mb-2" />
-            ) : (
-              <div className="w-24 h-24 bg-gray-200 flex items-center justify-center rounded mb-2">No Logo</div>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleLogoUpload}
-              className="hidden"
-            />
-            <button
-              className="px-2 py-1 bg-blue-600 text-white rounded"
-              onClick={() => fileInputRef.current?.click()}
-              type="button"
-            >Upload Logo</button>
-          </div>
-        </div>
-        {/* Seller, Buyer, Shipping Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h2 className="font-semibold mb-2">Seller Info</h2>
-            {Object.keys(invoiceData.seller).map((field) => (
-              <input
-                key={field}
-                className="w-full border rounded px-2 py-1 mb-2"
-                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={(invoiceData.seller as any)[field]}
-                onChange={e => handleChange("seller", field, e.target.value)}
-              />
-            ))}
-            <h2 className="font-semibold mb-2 mt-4">Buyer Info</h2>
-            {Object.keys(invoiceData.buyer).map((field) => (
-              <input
-                key={field}
-                className="w-full border rounded px-2 py-1 mb-2"
-                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={(invoiceData.buyer as any)[field]}
-                onChange={e => handleChange("buyer", field, e.target.value)}
-              />
-            ))}
-            <h2 className="font-semibold mb-2 mt-4">Shipping Info</h2>
-            {Object.keys(invoiceData.shipping).map((field) => (
-              <input
-                key={field}
-                className="w-full border rounded px-2 py-1 mb-2"
-                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={(invoiceData.shipping as any)[field]}
-                onChange={e => handleChange("shipping", field, e.target.value)}
-              />
-            ))}
-          </div>
-          <div>
-            <h2 className="font-semibold mb-2">Invoice Details</h2>
-            <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Invoice No" value={invoiceData.invoiceNo} onChange={e => handleRootChange("invoiceNo", e.target.value)} />
-            <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Order ID" value={invoiceData.orderId} onChange={e => handleRootChange("orderId", e.target.value)} />
-            <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Date" type="date" value={invoiceData.date} onChange={e => handleRootChange("date", e.target.value)} />
-            <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Payment Mode" value={invoiceData.paymentMode} onChange={e => handleRootChange("paymentMode", e.target.value)} />
-            {/* Extra Fields */}
-            <h2 className="font-semibold mb-2 mt-4">Extra Fields</h2>
-            {(invoiceData.extraFields || []).map((field, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <input
-                  className="flex-1 border rounded px-2 py-1"
-                  placeholder="Field Name"
-                  value={field.key}
-                  onChange={e => handleExtraFieldChange(idx, 'key', e.target.value)}
-                />
-                <input
-                  className="flex-1 border rounded px-2 py-1"
-                  placeholder="Field Value"
-                  value={field.value}
-                  onChange={e => handleExtraFieldChange(idx, 'value', e.target.value)}
-                />
-                <button className="text-red-500" onClick={() => removeExtraField(idx)} type="button">🗑</button>
+    <div className="bg-white min-h-screen">
+      {userType === 'admin' ? (
+        <AdminNavbar active="cart" />
+      ) : (
+        <RetailerNavbar active="cart" />
+      )}
+      <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <style>{`
+            .custom-scrollbar::-webkit-scrollbar { width: 10px; background: #f1f1f1; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #bdbdbd; border-radius: 8px; }
+            .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #bdbdbd #f1f1f1; }
+          `}</style>
+          <div className="max-w-4xl mx-auto py-8 px-4">
+            {/* Store/Company Info Section */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+              <div className="flex-1">
+                <h2 className="font-semibold mb-2">Store/Company Info</h2>
+                {Object.keys(invoiceData.storeInfo || {}).map((field) => (
+                  <input
+                    key={field}
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                    value={(invoiceData.storeInfo as any)[field]}
+                    onChange={e => setInvoiceData(prev => ({
+                      ...prev,
+                      storeInfo: { ...(prev.storeInfo || {}), [field]: e.target.value }
+                    }))}
+                  />
+                ))}
               </div>
-            ))}
-            <button className="px-2 py-1 bg-blue-600 text-white rounded" onClick={addExtraField} type="button">+ Add Field</button>
-          </div>
-        </div>
-        {/* Products Table */}
-        <div className="mt-8">
-          <h2 className="font-semibold mb-2">Products</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full border text-xs table-fixed">
-              <thead>
-                <tr>
-                  {invoiceData.columns.map((col) => (
-                    <th key={col} className="border px-2 py-1 truncate max-w-[120px]">{col}</th>
-                  ))}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {calculatedProducts.map((row, idx) => (
-                  <tr key={idx}>
-                    {invoiceData.columns.map((col) => (
-                      <td key={col} className="border px-2 py-1 text-center truncate break-words max-w-[120px]">
-                        <input
-                          className="w-20 border rounded px-1 py-0.5"
-                          value={String((row as any)[col] ?? "")}
-                          onChange={e => handleProductChange(
-                            idx,
-                            col,
-                            col === 'Qty' || col.includes('₹') || col === 'GST %' ? Number(e.target.value) : e.target.value
-                          )}
-                          type={col === 'Qty' || col.includes('₹') || col === 'GST %' ? 'number' : 'text'}
-                        />
-                      </td>
+              <div className="flex flex-col items-center">
+                <label className="mb-2 font-semibold">Logo</label>
+                {logoPreview || invoiceData.logo ? (
+                  <img src={logoPreview || invoiceData.logo} alt="Logo" className="w-24 h-24 object-contain border rounded mb-2" />
+                ) : (
+                  <div className="w-24 h-24 bg-gray-200 flex items-center justify-center rounded mb-2">No Logo</div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                <button
+                  className="px-2 py-1 bg-blue-600 text-white rounded"
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >Upload Logo</button>
+              </div>
+            </div>
+            {/* Seller, Buyer, Shipping Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h2 className="font-semibold mb-2">Seller Info</h2>
+                {Object.keys(invoiceData.seller).map((field) => (
+                  <input
+                    key={field}
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                    value={(invoiceData.seller as any)[field]}
+                    onChange={e => handleChange("seller", field, e.target.value)}
+                  />
+                ))}
+                <h2 className="font-semibold mb-2 mt-4">Buyer Info</h2>
+                {Object.keys(invoiceData.buyer).map((field) => (
+                  <input
+                    key={field}
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                    value={(invoiceData.buyer as any)[field]}
+                    onChange={e => handleChange("buyer", field, e.target.value)}
+                  />
+                ))}
+                <h2 className="font-semibold mb-2 mt-4">Shipping Info</h2>
+                {Object.keys(invoiceData.shipping).map((field) => (
+                  <input
+                    key={field}
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                    value={(invoiceData.shipping as any)[field]}
+                    onChange={e => handleChange("shipping", field, e.target.value)}
+                  />
+                ))}
+              </div>
+              <div>
+                <h2 className="font-semibold mb-2">Invoice Details</h2>
+                <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Invoice No" value={invoiceData.invoiceNo} onChange={e => handleRootChange("invoiceNo", e.target.value)} />
+                <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Order ID" value={invoiceData.orderId} onChange={e => handleRootChange("orderId", e.target.value)} />
+                <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Date" type="date" value={invoiceData.date} onChange={e => handleRootChange("date", e.target.value)} />
+                <input className="w-full border rounded px-2 py-1 mb-2" placeholder="Payment Mode" value={invoiceData.paymentMode} onChange={e => handleRootChange("paymentMode", e.target.value)} />
+                {/* Extra Fields */}
+                <h2 className="font-semibold mb-2 mt-4">Extra Fields</h2>
+                {(invoiceData.extraFields || []).map((field, idx) => (
+                  <div key={idx} className="flex gap-2 mb-2">
+                    <input
+                      className="flex-1 border rounded px-2 py-1"
+                      placeholder="Field Name"
+                      value={field.key}
+                      onChange={e => handleExtraFieldChange(idx, 'key', e.target.value)}
+                    />
+                    <input
+                      className="flex-1 border rounded px-2 py-1"
+                      placeholder="Field Value"
+                      value={field.value}
+                      onChange={e => handleExtraFieldChange(idx, 'value', e.target.value)}
+                    />
+                    <button className="text-red-500" onClick={() => removeExtraField(idx)} type="button">🗑</button>
+                  </div>
+                ))}
+                <button className="px-2 py-1 bg-blue-600 text-white rounded" onClick={addExtraField} type="button">+ Add Field</button>
+              </div>
+            </div>
+            {/* Products Table */}
+            <div className="mt-8">
+              <h2 className="font-semibold mb-2">Products</h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border text-xs table-fixed">
+                  <thead>
+                    <tr>
+                      {invoiceData.columns.map((col) => (
+                        <th key={col} className="border px-2 py-1 truncate max-w-[120px]">{col}</th>
+                      ))}
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calculatedProducts.map((row, idx) => (
+                      <tr key={idx}>
+                        {invoiceData.columns.map((col) => (
+                          <td key={col} className="border px-2 py-1 text-center truncate break-words max-w-[120px]">
+                            <input
+                              className="w-20 border rounded px-1 py-0.5"
+                              value={String((row as any)[col] ?? "")}
+                              onChange={e => handleProductChange(
+                                idx,
+                                col,
+                                col === 'Qty' || col.includes('₹') || col === 'GST %' ? Number(e.target.value) : e.target.value
+                              )}
+                              type={col === 'Qty' || col.includes('₹') || col === 'GST %' ? 'number' : 'text'}
+                            />
+                          </td>
+                        ))}
+                        <td>
+                          <button onClick={() => removeProductRow(idx)} className="text-red-500">🗑</button>
+                        </td>
+                      </tr>
                     ))}
-                    <td>
-                      <button onClick={() => removeProductRow(idx)} className="text-red-500">🗑</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={addProductRow} className="mt-2 px-2 py-1 bg-blue-600 text-white rounded">+ Add Row</button>
-          </div>
-        </div>
-        {/* GST Summary and Grand Total */}
-        <div className="mt-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="font-semibold mb-2">GST Summary</h2>
-            <table className="border text-xs">
-              <thead>
-                <tr>
-                  <th className="border px-2 py-1">GST %</th>
-                  <th className="border px-2 py-1">Taxable Value</th>
-                  <th className="border px-2 py-1">GST Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gstSummaryArr.map((row) => (
-                  <tr key={row.gstPercent}>
-                    <td className="border px-2 py-1 text-center">{row.gstPercent}</td>
-                    <td className="border px-2 py-1 text-right">{row.taxable}</td>
-                    <td className="border px-2 py-1 text-right">{row.gstAmt}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-col items-end">
-            <div className="font-bold text-lg">Grand Total: ₹{grandTotal.toFixed(2)}</div>
-            <div className="italic text-sm text-gray-600">In Words: {amountWords}</div>
-            {/* GST summary values beside grand total */}
-            <div className="mt-2 text-xs text-right">
-              {gstSummaryArr.map(row => (
-                <div key={row.gstPercent}>
-                  <span className="font-semibold">GST {row.gstPercent}%:</span> Taxable ₹{row.taxable}, GST ₹{row.gstAmt}
+                  </tbody>
+                </table>
+                <button onClick={addProductRow} className="mt-2 px-2 py-1 bg-blue-600 text-white rounded">+ Add Row</button>
+              </div>
+            </div>
+            {/* GST Summary and Grand Total */}
+            <div className="mt-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h2 className="font-semibold mb-2">GST Summary</h2>
+                <table className="border text-xs">
+                  <thead>
+                    <tr>
+                      <th className="border px-2 py-1">GST %</th>
+                      <th className="border px-2 py-1">Taxable Value</th>
+                      <th className="border px-2 py-1">GST Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gstSummaryArr.map((row) => (
+                      <tr key={row.gstPercent}>
+                        <td className="border px-2 py-1 text-center">{row.gstPercent}</td>
+                        <td className="border px-2 py-1 text-right">{row.taxable}</td>
+                        <td className="border px-2 py-1 text-right">{row.gstAmt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col items-end">
+                <div className="font-bold text-lg">Grand Total: ₹{grandTotal.toFixed(2)}</div>
+                <div className="italic text-sm text-gray-600">In Words: {amountWords}</div>
+                {/* GST summary values beside grand total */}
+                <div className="mt-2 text-xs text-right">
+                  {gstSummaryArr.map(row => (
+                    <div key={row.gstPercent}>
+                      <span className="font-semibold">GST {row.gstPercent}%:</span> Taxable ₹{row.taxable}, GST ₹{row.gstAmt}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            </div>
+            <div className="mt-8 flex gap-4">
+              <button onClick={handleDownload} className="px-6 py-2 bg-black text-white rounded hover:bg-gray-900 font-semibold">Download PDF</button>
+            </div>
+            <div className="mt-8">
+              <h2 className="font-semibold mb-2">Preview</h2>
+              {renderPreview()}
             </div>
           </div>
-        </div>
-        <div className="mt-8 flex gap-4">
-          <button onClick={handleDownload} className="px-6 py-2 bg-black text-white rounded hover:bg-gray-900 font-semibold">Download PDF</button>
-        </div>
-        <div className="mt-8">
-          <h2 className="font-semibold mb-2">Preview</h2>
-          {renderPreview()}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
-} 
+}
