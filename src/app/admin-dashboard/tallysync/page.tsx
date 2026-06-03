@@ -56,7 +56,13 @@ export default function TallySyncPage() {
         });
         if (res.data?.companies?.length > 0) {
           setSavedCompanies(res.data.companies);
-          setSelectedCompany(res.data.companies[0]);
+          // ✅ Restore last selected company from sessionStorage on navigation return
+          const lastCompany = sessionStorage.getItem("tallysync_selectedCompany");
+          if (lastCompany && res.data.companies.includes(lastCompany)) {
+            setSelectedCompany(lastCompany);
+          } else {
+            setSelectedCompany(res.data.companies[0]);
+          }
         }
       } catch (err) {
         console.error("Error fetching companies", err);
@@ -64,29 +70,28 @@ export default function TallySyncPage() {
         setLoading(false);
       }
     };
+    // ✅ Clear stale syncResponse on mount (component re-mounted after tab navigation)
+    setSyncResponse(null);
     fetchCompanies();
     checkAgentStatus();
   }, [apiurl]);
 
   // ✅ Check agent status 
   const checkAgentStatus = async () => {
-    // We skip sending a "TEST" task because it creates "Company Mismatch" errors in the agent logs.
-    // TODO: Implement a proper read-only status check (e.g. checking lastSeen).
-    // For now, we assume 'online' if we can load companies, or just leave it as 'checking' until first sync.
-    setAgentStatus("online");
-
-    /* 
-    // Previous logic caused mismatch errors:
+    setAgentStatus("checking");
     try {
       const token = localStorage.getItem("token");
-      await axios.get(`${apiurl}/agent/sync/fetch-tally`, {
+      const res = await axios.get(`${apiurl}/agent/sync/agent-health`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { companyName: "TEST", port: 9000 },
-        timeout: 5000
       });
-      setAgentStatus("online");
-    } catch (error) { ... }
-    */
+      if (res.data?.online) {
+        setAgentStatus("online");
+      } else {
+        setAgentStatus("offline");
+      }
+    } catch (err) {
+      setAgentStatus("offline");
+    }
   };
 
   // ✅ Unified Sync Logic (Agent API)
@@ -112,12 +117,56 @@ export default function TallySyncPage() {
 
       if (res.data?.success) {
         setSyncResponse(res.data);
+        const requestId = res.data.requestId;
+
+        // Bug 1 fix: Poll for real task result instead of showing "success" immediately
         setNotification({
-          message: `✅ Sync command sent successfully!`,
-          type: "success",
+          message: `⏳ Task created. Waiting for agent to process...`,
+          type: "info",
         });
-        setLastSync({ time: new Date(), type: "success" });
-        setAgentStatus("online");
+
+        // Poll for task status every 2 seconds, up to 75 attempts (150 seconds)
+        // Agent needs time to: fetch companies (15s timeout) + fetch stock items (120s timeout)
+        let taskCompleted = false;
+        for (let attempt = 0; attempt < 75; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            const statusRes = await axios.get(
+              `${apiurl}/agent/sync/task-status/${requestId}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const task = statusRes.data;
+            if (task.status === 'COMPLETED') {
+              setNotification({
+                message: `✅ ${task.result || 'Sync completed successfully!'}`,
+                type: "success",
+              });
+              setLastSync({ time: new Date(), type: "success" });
+              setAgentStatus("online");
+              taskCompleted = true;
+              break;
+            } else if (task.status === 'FAILED') {
+              setNotification({
+                message: `❌ Sync failed: ${task.error || 'Unknown error'}`,
+                type: "error",
+              });
+              setLastSync({ time: new Date(), type: "error" });
+              taskCompleted = true;
+              break;
+            }
+            // Still PENDING or IN_PROGRESS — continue polling
+          } catch (_pollErr) {
+            // Ignore polling errors, continue loop
+          }
+        }
+
+        if (!taskCompleted) {
+          setNotification({
+            message: `⏳ Sync is taking longer than expected. The agent is still processing. Check back later.`,
+            type: "info",
+          });
+          setLastSync({ time: new Date(), type: "success" });
+        }
       } else {
         setNotification({
           message: res.data?.message || "Unexpected response from agent.",
@@ -142,6 +191,7 @@ export default function TallySyncPage() {
     runAgentSync(); // Run immediately
     intervalRef.current = setInterval(runAgentSync, 5 * 60 * 1000);
     setIsAutoSyncing(true);
+    sessionStorage.setItem("tallysync_autoSyncing", "true");
     setNotification({ message: "🔄 Auto-sync started (every 5 minutes)", type: "info" });
   };
 
@@ -150,6 +200,7 @@ export default function TallySyncPage() {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     setIsAutoSyncing(false);
+    sessionStorage.removeItem("tallysync_autoSyncing");
     setNotification({ message: "⏹️ Auto-sync stopped.", type: "info" });
   };
 
@@ -177,6 +228,26 @@ export default function TallySyncPage() {
       setNotification({ message: msg, type: "error" });
     }
   };
+
+  // ✅ Persist selected company to sessionStorage on change
+  const handleCompanyChange = (company: string) => {
+    setSelectedCompany(company);
+    if (company) {
+      sessionStorage.setItem("tallysync_selectedCompany", company);
+    } else {
+      sessionStorage.removeItem("tallysync_selectedCompany");
+    }
+  };
+
+  // ✅ Restore auto-sync state on mount (from previous navigation)
+  useEffect(() => {
+    const wasAutoSyncing = sessionStorage.getItem("tallysync_autoSyncing") === "true";
+    if (wasAutoSyncing && !isAutoSyncing && !intervalRef.current) {
+      // Restore auto-sync but don't run immediately (avoid double-sync on mount)
+      intervalRef.current = setInterval(runAgentSync, 5 * 60 * 1000);
+      setIsAutoSyncing(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ Copy token to clipboard
   const copyTokenToClipboard = () => {
@@ -236,7 +307,7 @@ export default function TallySyncPage() {
       {notification && (
         <div
           className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2 ${notification.type === 'success' ? 'bg-green-600' :
-              notification.type === 'error' ? 'bg-red-600' : 'bg-gray-900'
+            notification.type === 'error' ? 'bg-red-600' : 'bg-gray-900'
             } text-white`}
         >
           {notification.type === 'success' && '✅'}
@@ -249,16 +320,16 @@ export default function TallySyncPage() {
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">TallySync Agent</h1>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="w-full space-y-6"
-          >
-            {loading && (
-              <div className="fixed inset-0 bg-white/50 backdrop-blur-[1px] z-40 flex items-center justify-center">
-                <UniversalLoader text="Initializing sync agent..." />
-              </div>
-            )}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="w-full space-y-6"
+        >
+          {loading && (
+            <div className="fixed inset-0 bg-white/50 backdrop-blur-[1px] z-40 flex items-center justify-center">
+              <UniversalLoader text="Initializing sync agent..." />
+            </div>
+          )}
           {/* Header Section with 2-column layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Column - Main Controls */}
@@ -332,7 +403,7 @@ export default function TallySyncPage() {
                     <label className="block text-sm font-medium text-gray-700">Company</label>
                     <select
                       value={selectedCompany}
-                      onChange={e => setSelectedCompany(e.target.value)}
+                      onChange={e => handleCompanyChange(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#A8E0D8] focus:border-transparent outline-none text-sm bg-white"
                     >
                       <option value="">-- Select a Company --</option>
@@ -568,8 +639,8 @@ export default function TallySyncPage() {
             </div>
           </div>
         </motion.div>
+      </div>
     </div>
-  </div>
 
   );
 }
