@@ -125,10 +125,10 @@ export default function TallySyncPage() {
           type: "info",
         });
 
-        // Poll for task status every 2 seconds, up to 75 attempts (150 seconds)
-        // Agent needs time to: fetch companies (15s timeout) + fetch stock items (120s timeout)
+        // Poll for task status every 2 seconds, up to 180 attempts (360 seconds / 6 minutes)
+        // Agent needs time to: fetch companies (15s) + fetch stock items (300s / 5 min)
         let taskCompleted = false;
-        for (let attempt = 0; attempt < 75; attempt++) {
+        for (let attempt = 0; attempt < 180; attempt++) {
           await new Promise(r => setTimeout(r, 2000));
           try {
             const statusRes = await axios.get(
