@@ -585,9 +585,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
     let url = imagePath;
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
-    }
+    url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
     if (url.startsWith('http')) return url;
     const hasLeadSlash = url.startsWith('/');
     const cleanApiUrl = apiurl?.endsWith('/') ? apiurl.slice(0, -1) : apiurl;

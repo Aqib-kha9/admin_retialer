@@ -164,9 +164,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
   const getImageUrl = (img: string) => {
     if (!img) return '';
     let url = img;
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
-    }
+    url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
     if (url.startsWith('http')) return url;
     const hasLeadSlash = url.startsWith('/');
     const cleanApiUrl = apiurl?.endsWith('/') ? apiurl.slice(0, -1) : apiurl;
