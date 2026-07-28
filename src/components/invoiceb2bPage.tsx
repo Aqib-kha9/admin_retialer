@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import AdminNavbar from "./AdminNavbar";
 import RetailerNavbar from "./RetailerNavbar";
 import { motion, AnimatePresence } from "framer-motion";
+import { FaArrowLeft } from "react-icons/fa";
 import UniversalLoader from "@/components/UniversalLoader";
 
 // Utility to convert number to words (simple version for INR)
@@ -379,6 +380,13 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
       )}
       
       <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <button
+          onClick={() => router.push(userType === 'admin' ? '/admin-dashboard/cart' : '/retailer-dashboard/cart')}
+          className="inline-flex items-center space-x-2 text-gray-500 hover:text-gray-950 transition-colors mb-6 group cursor-pointer animate-none"
+        >
+          <FaArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <span className="font-medium text-sm">Back to Cart</span>
+        </button>
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

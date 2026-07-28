@@ -125,10 +125,11 @@ export default function TallySyncPage() {
           type: "info",
         });
 
-        // Poll for task status every 2 seconds, up to 180 attempts (360 seconds / 6 minutes)
-        // Agent needs time to: fetch companies (15s) + fetch stock items (300s / 5 min)
+        // Poll for task status every 2 seconds, up to 90 attempts (180 seconds / 3 minutes)
+        // With FETCH format (no date range), Tally responds in 30-120s even for 1500+ products.
+        // 3 min gives ample headroom for: company fetch (15s) + stock fetch (≤120s) + backend send (≤30s).
         let taskCompleted = false;
-        for (let attempt = 0; attempt < 180; attempt++) {
+        for (let attempt = 0; attempt < 90; attempt++) {
           await new Promise(r => setTimeout(r, 2000));
           try {
             const statusRes = await axios.get(

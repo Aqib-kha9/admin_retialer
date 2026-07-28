@@ -26,6 +26,62 @@ const TechInfoRow = ({ label, value, icon: Icon }: { label: string; value: any; 
   );
 };
 
+// Skeleton component for loading state
+const ProductSkeleton = ({ userType }: { userType: 'admin' | 'retailer' }) => {
+  return (
+    <div className="min-h-screen bg-white">
+      {userType === 'admin' ? <AdminNavbar active="product" /> : <RetailerNavbar active="product" />}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-pulse">
+        {/* Back Button Skeleton */}
+        <div className="h-6 w-32 bg-gray-200 rounded-lg mb-6"></div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+          {/* Left Column: Image Gallery Skeleton */}
+          <div className="lg:col-span-5 space-y-4 sm:space-y-6">
+            <div className="w-full aspect-square bg-gray-200 rounded-2xl sm:rounded-[32px]"></div>
+            <div className="flex space-x-3">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+            </div>
+          </div>
+
+          {/* Right Column: Info Skeleton */}
+          <div className="lg:col-span-7 space-y-6 sm:space-y-10">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex gap-2">
+                <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
+                <div className="h-6 w-24 bg-gray-200 rounded-full"></div>
+              </div>
+              <div className="h-10 w-3/4 bg-gray-200 rounded-xl"></div>
+              <div className="space-y-2">
+                <div className="h-4 w-full bg-gray-200 rounded"></div>
+                <div className="h-4 w-5/6 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+
+            {/* Price Skeleton */}
+            <div className="space-y-2">
+              <div className="h-4 w-20 bg-gray-200 rounded"></div>
+              <div className="h-10 w-32 bg-gray-200 rounded-xl"></div>
+            </div>
+
+            {/* Spec Grid Skeleton */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+              <div className="h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+              <div className="h-20 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+            </div>
+
+            {/* Action Buttons Skeleton */}
+            <div className="h-12 w-48 bg-gray-200 rounded-xl sm:rounded-2xl"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function ProductDetailsPage({ userType }: { userType: 'admin' | 'retailer' }) {
   const router = useRouter();
   const params = useParams();
@@ -85,7 +141,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
           const entry = (res.data.retailerproducts || []).find((entry: any) => entry.product.product_id === productId);
           if (entry) {
             const productOffers = offers.filter((offer: any) => offer.product_id === entry.product.product_id);
-            found = { ...entry.product, inventory: entry.inventory, offers: productOffers };
+            found = { ...entry.product, inventory: entry.inventory, offers: productOffers, preOrder: entry.preOrder || null };
           } else {
             found = null;
           }
@@ -107,8 +163,14 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
 
   const getImageUrl = (img: string) => {
     if (!img) return '';
-    if (img.startsWith('http')) return img;
-    return `${apiurl}${img}`;
+    let url = img;
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
+    }
+    if (url.startsWith('http')) return url;
+    const hasLeadSlash = url.startsWith('/');
+    const cleanApiUrl = apiurl?.endsWith('/') ? apiurl.slice(0, -1) : apiurl;
+    return `${cleanApiUrl}${hasLeadSlash ? '' : '/'}${url}`;
   };
 
   // Handle image file selection
@@ -226,9 +288,16 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
     }
   };
 
+  const getAvailableQty = (prod: any): number => {
+    if (prod?.preOrder?.hasHighlight && prod?.preOrder?.showQuantity) {
+      return prod.preOrder.availableQuantity ?? prod.inventory?.quantity ?? 0;
+    }
+    return prod?.inventory?.quantity || 0;
+  };
+
   const handleAddToCart = () => {
     if (!product) return;
-    const maxQty = product.inventory?.quantity || 1;
+    const maxQty = getAvailableQty(product) || 1;
     const qty = Math.min(Number(cartQty), maxQty);
     let updatedCart = [...cart];
     const idx = updatedCart.findIndex((p) => p.product_id === product.product_id);
@@ -252,6 +321,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
       quantity: product.inventory?.quantity ?? '',
       batch_no: product.inventory?.batch_no ?? '',
       expiry_date: product.inventory?.expiry_date ? new Date(product.inventory.expiry_date).toISOString().slice(0, 10) : '',
+      video_url: product.video_url ?? '',
     });
   };
 
@@ -260,37 +330,34 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
   };
 
   const handleSave = async () => {
+    let hasUploaded = false;
     if (newImages.length > 0) {
       await uploadAndUpdateProduct();
+      hasUploaded = true;
     }
 
     const changed: any = {};
     Object.keys(editFields).forEach((key) => {
-      if (key !== 'images' && editFields[key] !== product[key]) {
-        changed[key] = editFields[key];
+      if (key !== 'images') {
+        const oldValue = product[key] ?? '';
+        const newValue = editFields[key] ?? '';
+        if (String(newValue).trim() !== String(oldValue).trim()) {
+          changed[key] = editFields[key];
+        }
       }
     });
 
-    if (Object.keys(changed).length > 0) {
-      setPendingFields(changed);
-      setShowConfirm(true);
-    } else if (newImages.length === 0) {
-      toast('No changes to save');
-      setEditing(false);
-    } else {
-      setEditing(false);
-    }
-  };
-
-  const confirmSave = async () => {
-    setShowConfirm(false);
-    if (!pendingFields || Object.keys(pendingFields).length === 0) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${apiurl}/product/update/${product.product_id}`, pendingFields, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success('Product updated successfully!');
+      if (Object.keys(changed).length > 0) {
+        await axios.post(`${apiurl}/product/update/${product.product_id}`, changed, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast.success('Product updated successfully!');
+      } else if (!hasUploaded) {
+        toast('No changes to save');
+      }
+      
       setEditing(false);
       setPendingFields(null);
       
@@ -302,7 +369,8 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
       const found = res.data.find((p: any) => p.product_id === productId);
       setProduct(found);
     } catch (err) {
-      toast.error('Failed to update product');
+      console.error('Save error:', err);
+      toast.error('Failed to update product details');
     }
   };
 
@@ -312,7 +380,7 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
     setImagePreviews([]);
   };
 
-  if (loading) return <UniversalLoader />;
+  if (loading) return <ProductSkeleton userType={userType} />;
   
   if (!product) return (
     <div className="min-h-screen bg-white">
@@ -336,11 +404,23 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
     </div>
   );
 
+  const displayImages = [
+    ...(product.images || []).map((img: string) => ({ url: getImageUrl(img), isPreview: false, original: img })),
+    ...imagePreviews.map((preview: string) => ({ url: preview, isPreview: true }))
+  ];
+
   return (
     <div className="min-h-screen bg-white">
       {userType === 'admin' ? <AdminNavbar active="product" /> : <RetailerNavbar active="product" />}
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+        <button
+          onClick={handleBackToDashboard}
+          className="inline-flex items-center space-x-2 text-gray-500 hover:text-gray-950 transition-colors mb-6 group cursor-pointer"
+        >
+          <FaArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <span className="font-medium text-sm">Back to Dashboard</span>
+        </button>
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -350,14 +430,14 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
           <div className="lg:col-span-5 space-y-4 sm:space-y-6">
             <div className="relative group rounded-2xl sm:rounded-[32px] overflow-hidden bg-gray-50 border border-gray-100 aspect-square flex items-center justify-center p-4 sm:p-8 transition-all hover:bg-gray-100/50">
               <AnimatePresence mode="wait">
-                {(product.images && product.images.length > 0) || imagePreviews.length > 0 ? (
+                {displayImages.length > 0 ? (
                   <motion.img
-                    key={imgIdx + (imagePreviews.length > 0 ? 'preview' : 'existing')}
+                    key={imgIdx}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 1.05 }}
                     transition={{ duration: 0.4 }}
-                    src={getImageUrl((imagePreviews.length > 0 ? imagePreviews[imgIdx] : product.images[imgIdx]))}
+                    src={displayImages[imgIdx]?.url || '/no-image.png'}
                     alt={product.name}
                     className="w-full h-full object-contain drop-shadow-xl"
                   />
@@ -372,26 +452,18 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
 
             {/* Thumbnails */}
             <div className="flex space-x-3 overflow-x-auto pb-4 px-1 custom-scrollbar scroll-smooth">
-              {(product.images || []).map((img: string, idx: number) => (
+              {displayImages.map((img: any, idx: number) => (
                 <button 
                   key={idx}
                   onClick={() => setImgIdx(idx)}
                   className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl overflow-hidden border-2 transition-all duration-300 ${imgIdx === idx ? "border-gray-900 scale-105 shadow-md" : "border-gray-100 hover:border-gray-300"}`}
                 >
-                  <img src={getImageUrl(img)} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
-                  {editing && userType === 'admin' && (
-                    <div onClick={(e) => { e.stopPropagation(); removeExistingImage(img, idx); }} className="absolute top-1 right-1 bg-white/80 backdrop-blur-sm text-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <img src={img.url} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
+                  {editing && userType === 'admin' && !img.isPreview && (
+                    <div onClick={(e) => { e.stopPropagation(); removeExistingImage(img.original, idx); }} className="absolute top-1 right-1 bg-white/80 backdrop-blur-sm text-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <FaTimes className="w-2 h-2" />
                     </div>
                   )}
-                </button>
-              ))}
-              {imagePreviews.map((preview, idx) => (
-                <button 
-                  key={`new-${idx}`}
-                  className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-dashed border-blue-400 p-1 bg-blue-50/30"
-                >
-                  <img src={preview} alt="New" className="w-full h-full object-cover rounded-lg sm:rounded-xl" />
                 </button>
               ))}
               {editing && userType === 'admin' && (
@@ -447,6 +519,19 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
               </p>
             </div>
 
+            {editing && (
+              <div className="space-y-1.5 p-3 sm:p-4 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                <label className="block text-xs font-bold uppercase tracking-wider text-blue-700">Product Video URL (YouTube or Direct Link)</label>
+                <input 
+                  type="text" 
+                  value={editFields.video_url || ''} 
+                  onChange={e => handleFieldChange('video_url', e.target.value)} 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 focus:outline-none"
+                  placeholder="Paste YouTube or video URL (e.g. https://www.youtube.com/watch?v=...)"
+                />
+              </div>
+            )}
+
             {/* Pricing Section */}
             <div className="flex items-center space-x-6">
               <div className="space-y-1">
@@ -493,7 +578,24 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
                 <div className="text-xs sm:text-sm font-bold text-gray-800">
                   {editing ? (
                     <input type="number" value={editFields.quantity} onChange={e => handleFieldChange('quantity', Number(e.target.value))} className="bg-transparent border-none focus:ring-0 w-full p-0 font-bold text-xs sm:text-sm" />
-                  ) : `${product.inventory?.quantity || 0} Units`}
+                  ) : (
+                    <div>
+                      <div>{product.inventory?.quantity || 0} Units</div>
+                      {product.preOrder?.hasHighlight && (
+                        (userType === 'admin' || product.preOrder.showQuantity) ? (
+                          <div className="mt-1 text-xs text-amber-700 font-medium">
+                            <div>Pre-order: {product.preOrder.totalQuantity} Units {userType === 'admin' && !product.preOrder.showQuantity && '(Hidden)'}</div>
+                            <div>Available: {product.preOrder.availableQuantity} Units</div>
+                          </div>
+                        ) : (
+                          <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-medium animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                            {product.preOrder.badgeText || 'Trending'}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="p-3 sm:p-4 bg-gray-50 rounded-xl sm:rounded-2xl border border-gray-100 space-y-1.5 sm:space-y-2">
@@ -568,37 +670,65 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
               )}
             </div>
 
-            {/* Technical Intelligence Section (Expanded with Tally Data) */}
-            <div className="pt-8 sm:pt-10 border-t border-gray-100">
-              <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 mb-6 flex items-center">
-                <FaDatabase className="mr-2 w-3 h-3" />
-                Technical Intelligence
-              </h3>
-              
-              <div className="bg-gray-50/50 rounded-[24px] p-6 border border-gray-100/50">
-                <div className="space-y-0 text-gray-900">
-                  {/* Tax & Units */}
-                  <TechInfoRow label="HSN Code" value={product.attributes?.hsn || product.attributes?.HL_HSN_CODE} icon={FaBarcode} />
-                  <TechInfoRow label="GST Status" value={product.attributes?.gst || product.attributes?.GSTAPPLICABLE} icon={FaPercentage} />
-                  <TechInfoRow label="Base Unit" value={product.attributes?.base_unit || product.attributes?.BASEUNITS} icon={FaBox} />
-                  <TechInfoRow label="Conversion" value={product.attributes?.CONVERSION} icon={FaExchangeAlt} />
-
-                  {/* Financials / Opening Stock */}
-                  <TechInfoRow label="Opening Bal" value={product.attributes?.OPENINGBALANCE || product.opening_balance} icon={FaHistory} />
-                  <TechInfoRow label="Opening Value" value={product.attributes?.OPENINGVALUE || product.opening_value} icon={FaDatabase} />
-                  <TechInfoRow label="Opening Rate" value={product.attributes?.OPENINGRATE} icon={FaTag} />
-
-                  {/* Classification */}
-                  <TechInfoRow label="Parent Group" value={product.attributes?.PARENT || product.parent} icon={FaBox} />
-                  <TechInfoRow label="Category" value={product.attributes?.CATEGORY} icon={FaTag} />
-                  <TechInfoRow label="Description" value={product.attributes?.DESCRIPTION} icon={FaBarcode} />
+            {/* Video Section */}
+            {!editing && product.video_url && (
+              <div className="pt-8 border-t border-gray-100">
+                <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 mb-4 flex items-center">
+                  🎥 Product Video
+                </h3>
+                {(() => {
+                  const url = product.video_url.trim();
                   
-                  {/* Metadata */}
-                  <TechInfoRow label="Tally GUID" value={product.attributes?.GUID} icon={FaSearch} />
-                  <TechInfoRow label="Alter ID" value={product.attributes?.ALTERID} icon={FaHistory} />
-                </div>
+                  const getYouTubeId = (urlStr: string) => {
+                    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                    const match = urlStr.match(regExp);
+                    return (match && match[2].length === 11) ? match[2] : null;
+                  };
+
+                  const ytId = getYouTubeId(url);
+
+                  if (ytId) {
+                    return (
+                      <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-md border border-gray-200">
+                        <iframe
+                          className="absolute inset-0 w-full h-full"
+                          src={`https://www.youtube.com/embed/${ytId}`}
+                          title="Product Video"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        ></iframe>
+                      </div>
+                    );
+                  }
+
+                  const isDirectVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ogg') || url.includes('/video/');
+                  if (isDirectVideo) {
+                    return (
+                      <div className="relative w-full rounded-2xl overflow-hidden shadow-md border border-gray-200 bg-black">
+                        <video
+                          src={url}
+                          controls
+                          className="w-full max-h-[360px]"
+                        ></video>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-50 text-blue-600 font-semibold rounded-xl hover:bg-blue-100 transition text-sm cursor-pointer border border-blue-100"
+                    >
+                      <span>Watch Product Video</span>
+                      <span>↗</span>
+                    </a>
+                  );
+                })()}
               </div>
-            </div>
+            )}
 
             {/* Insight / Intelligence Summary */}
             <div className="pt-8">
@@ -613,29 +743,6 @@ export default function ProductDetailsPage({ userType }: { userType: 'admin' | '
 
       {/* Confirmation Modals */}
       <AnimatePresence>
-        {showConfirm && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-[24px] sm:rounded-[32px] p-6 sm:p-8 max-w-sm w-full shadow-2xl space-y-6"
-            >
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gray-50 text-gray-900 rounded-2xl flex items-center justify-center mx-auto border border-gray-100">
-                <FaCheckCircle className="text-xl sm:text-2xl" />
-              </div>
-              <div className="text-center space-y-2">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900">Sync Updates?</h3>
-                <p className="text-gray-500 text-xs sm:text-sm">This will synchronize product data across all retailer portals.</p>
-              </div>
-              <div className="flex flex-col space-y-3">
-                <button onClick={confirmSave} className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold hover:bg-black transition-all active:scale-95 text-sm sm:text-base">Push Updates</button>
-                <button onClick={() => setShowConfirm(false)} className="w-full text-gray-400 font-bold hover:text-gray-600 transition-colors py-2 text-xs sm:text-sm uppercase tracking-widest leading-none">Keep Editing</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <motion.div 

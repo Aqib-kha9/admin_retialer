@@ -959,10 +959,20 @@ export default function CustomizationPage() {
                                 placeholder="all or 2,3,4"
                               />
                             </div>
+                          ) : field === 'product_id' ? (
+                            <div className="flex flex-col items-center justify-center select-none">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 text-gray-400 border-gray-200 rounded cursor-not-allowed bg-gray-50"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <span className="text-[10px] text-gray-500 font-semibold mt-0.5 whitespace-nowrap">Always Visible</span>
+                            </div>
                           ) : (
                             <input
                               type="checkbox"
-                              className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                              className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer"
                               checked={Boolean(fieldVisibility[retailer.id]?.[field] ?? true)}
                               onChange={() => handleFieldToggle(retailer.id, field)}
                             />

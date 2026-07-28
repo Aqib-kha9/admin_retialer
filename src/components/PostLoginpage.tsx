@@ -227,7 +227,7 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
                 transition: 'background 0.2s',
               }}
             >
-              Create Categories
+              {userType === 'admin' ? 'Create Categories' : 'View Custom Categories'}
             </button>
             {(message || error) && (
               <div style={{
@@ -251,6 +251,8 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
                 handleSaveCategories={handleSaveCategories}
                 setShowModal={setShowModal}
                 userType={userType}
+                categories={categories}
+                setCategories={setCategories}
               />
             )}
           </div>
@@ -347,10 +349,14 @@ function CategoryModal({
   handleAddCategory,
   handleSaveCategories,
   setShowModal,
-  userType
+  userType,
+  categories,
+  setCategories
 }: any) {
   const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
+
   useEffect(() => {
     // Always fetch latest categories from DB when modal opens
     const fetchCategories = async () => {
@@ -384,20 +390,43 @@ function CategoryModal({
       const res = await axios.get(`${apiurl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setDbCategories(res.data || []);
+      const data = res.data || [];
+      setDbCategories(data);
+      setCategories(data);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to delete category');
     }
   };
 
-  // In CategoryModal, prevent duplicate category names
+  // In CategoryModal, prevent duplicate category names and handle editing
   const handleAddCategoryWithCheck = () => {
     if (!newCategoryName.trim()) return;
-    if (dbCategories.some((cat: any) => cat.name.trim().toLowerCase() === newCategoryName.trim().toLowerCase())) {
-      toast.error('A category with this name already exists.');
-      return;
+    
+    if (editingCategoryName) {
+      // If name changed, check if new name already exists elsewhere
+      if (newCategoryName.trim().toLowerCase() !== editingCategoryName.toLowerCase() &&
+          dbCategories.some((cat: any) => cat.name.trim().toLowerCase() === newCategoryName.trim().toLowerCase())) {
+        toast.error('A category with this name already exists.');
+        return;
+      }
+      // Update in categories state
+      const updated = categories.map((cat: any) =>
+        cat.name === editingCategoryName ? { ...cat, name: newCategoryName, productIds: newCategoryProducts } : cat
+      );
+      setCategories(updated);
+      setDbCategories(updated);
+      setEditingCategoryName(null);
+      setNewCategoryName('');
+      setNewCategoryProducts([]);
+      toast.success('Category updated in list. Click "Save Categories" to save changes.');
+    } else {
+      if (dbCategories.some((cat: any) => cat.name.trim().toLowerCase() === newCategoryName.trim().toLowerCase())) {
+        toast.error('A category with this name already exists.');
+        return;
+      }
+      handleAddCategory();
+      setDbCategories(prev => [...prev, { name: newCategoryName, productIds: newCategoryProducts }]);
     }
-    handleAddCategory();
   };
 
   return (
@@ -416,74 +445,97 @@ function CategoryModal({
         boxSizing: 'border-box',
         width: '100%',
       }}>
-        <h2 style={{ fontWeight: 600, fontSize: 24, marginBottom: 24 }}>Add Custom Category</h2>
-        <input
-          type="text"
-          placeholder="Category Name"
-          value={newCategoryName}
-          onChange={e => setNewCategoryName(e.target.value)}
-          style={{ width: '100%', marginBottom: 16, padding: 10, borderRadius: 6, border: '1px solid #ccc', fontSize: 16 }}
-        />
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontWeight: 500, marginBottom: 6, display: 'block' }}>Search Products:</label>
-          <input
-            type="text"
-            placeholder="Search by name, id, sku, brand..."
-            value={productSearch}
-            onChange={e => setProductSearch(e.target.value)}
-            style={{ width: '100%', marginBottom: 8, padding: 8, borderRadius: 6, border: '1px solid #ccc', fontSize: 15 }}
-          />
-          <label style={{ fontWeight: 500 }}>Select Products:</label>
-          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, marginTop: 6 }}>
-            <table style={{ width: '100%', fontSize: 14 }}>
-              <thead>
-                <tr style={{ background: '#f5f5f5' }}>
-                  <th style={{ padding: 6 }}>Select</th>
-                  <th style={{ padding: 6 }}>ID</th>
-                  <th style={{ padding: 6 }}>Name</th>
-                  <th style={{ padding: 6 }}>SKU</th>
-                  <th style={{ padding: 6 }}>Brand</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.filter((p: any) =>
-                  (p?.name && p.name.toLowerCase().includes(productSearch.toLowerCase())) ||
-                  (p?.product_id && p.product_id.toLowerCase().includes(productSearch.toLowerCase())) ||
-                  (p?.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
-                  (p?.brand && p.brand.toLowerCase().includes(productSearch.toLowerCase()))
-                ).map((p: any) => (
-                  <tr key={p.product_id}>
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={newCategoryProducts.includes(p.product_id)}
-                        onChange={e => {
-                          if (e.target.checked) {
-                            setNewCategoryProducts((prev: any) => [...prev, p.product_id]);
-                          } else {
-                            setNewCategoryProducts((prev: any) => prev.filter((id: string) => id !== p.product_id));
-                          }
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: 6 }}>{p.product_id}</td>
-                    <td style={{ padding: 6 }}>{p.name}</td>
-                    <td style={{ padding: 6 }}>{p.sku}</td>
-                    <td style={{ padding: 6 }}>{p.brand}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <h2 style={{ fontWeight: 600, fontSize: 24, marginBottom: 24 }}>
+          {userType === 'admin' ? 'Add Custom Category' : 'Custom Categories (Created by Admin)'}
+        </h2>
+        {userType === 'admin' && (
+          <>
+            <input
+              type="text"
+              placeholder="Category Name"
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              style={{ width: '100%', marginBottom: 16, padding: 10, borderRadius: 6, border: '1px solid #ccc', fontSize: 16 }}
+            />
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontWeight: 500, marginBottom: 6, display: 'block' }}>Search Products:</label>
+              <input
+                type="text"
+                placeholder="Search by name, id, sku, brand..."
+                value={productSearch}
+                onChange={e => setProductSearch(e.target.value)}
+                style={{ width: '100%', marginBottom: 8, padding: 8, borderRadius: 6, border: '1px solid #ccc', fontSize: 15 }}
+              />
+              <label style={{ fontWeight: 500 }}>Select Products:</label>
+              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, marginTop: 6 }}>
+                <table style={{ width: '100%', fontSize: 14 }}>
+                  <thead>
+                    <tr style={{ background: '#f5f5f5' }}>
+                      <th style={{ padding: 6 }}>Select</th>
+                      <th style={{ padding: 6 }}>ID</th>
+                      <th style={{ padding: 6 }}>Name</th>
+                      <th style={{ padding: 6 }}>SKU</th>
+                      <th style={{ padding: 6 }}>Brand</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.filter((p: any) =>
+                      (p?.name && p.name.toLowerCase().includes(productSearch.toLowerCase())) ||
+                      (p?.product_id && p.product_id.toLowerCase().includes(productSearch.toLowerCase())) ||
+                      (p?.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
+                      (p?.brand && p.brand.toLowerCase().includes(productSearch.toLowerCase()))
+                    ).map((p: any) => (
+                      <tr key={p.product_id}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={newCategoryProducts.includes(p.product_id)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setNewCategoryProducts((prev: any) => [...prev, p.product_id]);
+                              } else {
+                                setNewCategoryProducts((prev: any) => prev.filter((id: string) => id !== p.product_id));
+                              }
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: 6 }}>{p.product_id}</td>
+                        <td style={{ padding: 6 }}>{p.name}</td>
+                        <td style={{ padding: 6 }}>{p.sku}</td>
+                        <td style={{ padding: 6 }}>{p.brand}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <button
+              onClick={handleAddCategoryWithCheck}
+              style={{ background: editingCategoryName ? '#eab308' : '#0070f3',cursor:'pointer', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 600, marginBottom: 16, marginRight: 8, fontSize: 16 }}
+            >
+              {editingCategoryName ? 'Update Category' : 'Add Category'}
+            </button>
+            {editingCategoryName && (
+              <button
+                onClick={() => {
+                  setEditingCategoryName(null);
+                  setNewCategoryName('');
+                  setNewCategoryProducts([]);
+                }}
+                style={{ background: '#6b7280', cursor:'pointer', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 600, marginBottom: 16, marginRight: 8, fontSize: 16 }}
+              >
+                Cancel Edit
+              </button>
+            )}
+          </>
+        )}
         <button
-          onClick={handleAddCategoryWithCheck}
-          style={{ background: '#0070f3',cursor:'pointer', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 600, marginBottom: 16, marginRight: 8, fontSize: 16 }}
-        >
-          Add Category
-        </button>
-        <button
-          onClick={() => setShowModal(false)}
+          onClick={() => {
+            setEditingCategoryName(null);
+            setNewCategoryName('');
+            setNewCategoryProducts([]);
+            setShowModal(false);
+          }}
           style={{ background: '#eee', cursor:'pointer', color: '#333', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 600, fontSize: 16 }}
         >
           Cancel
@@ -495,25 +547,41 @@ function CategoryModal({
               {dbCategories.map((cat, idx) => (
                 <li key={idx} style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <b>{cat.name}</b>: {cat.productIds?.length ? cat.productIds.length + ' products' : 'No products'}
-                  <button
-                    onClick={() => handleDeleteCategory(cat.name)}
-                    style={{ marginLeft: 8, color: '#ef4444', background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
-                    title="Delete category"
-                  >
-                    ×
-                  </button>
+                  {userType === 'admin' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingCategoryName(cat.name);
+                          setNewCategoryName(cat.name);
+                          setNewCategoryProducts(cat.productIds || []);
+                        }}
+                        style={{ marginLeft: 8, color: '#0070f3', background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', fontWeight: 600 }}
+                        title="Edit products in category"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat.name)}
+                        style={{ marginLeft: 8, color: '#ef4444', background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
+                        title="Delete category"
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </div>
-        <button
-          onClick={handleSaveCategories}
-          style={{ background: '#22c55e', cursor:'pointer', color: '#fff', border: 'none', borderRadius: 6, padding: '12px 28px', fontWeight: 600, marginTop: 24, width: '100%', fontSize: 17 }}
-          // disabled={dbCategories.length === 0}
-        >
-          Save Categories
-        </button>
+        {userType === 'admin' && (
+          <button
+            onClick={handleSaveCategories}
+            style={{ background: '#22c55e', cursor:'pointer', color: '#fff', border: 'none', borderRadius: 6, padding: '12px 28px', fontWeight: 600, marginTop: 24, width: '100%', fontSize: 17 }}
+          >
+            Save Categories
+          </button>
+        )}
       </div>
     </div>
   );

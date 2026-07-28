@@ -51,6 +51,24 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const [cartPopoverPos, setCartPopoverPos] = useState<{ top: number, left: number } | null>(null);
   const [filterHasOffer, setFilterHasOffer] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Pre-Order state
+  const [showPreOrderModal, setShowPreOrderModal] = useState(false);
+  const [preOrderProduct, setPreOrderProduct] = useState<any>(null);
+  const [preOrderQty, setPreOrderQty] = useState(1);
+  const [preOrderNote, setPreOrderNote] = useState('');
+  const [preOrderShowQty, setPreOrderShowQty] = useState(true);
+  const [preOrderEntries, setPreOrderEntries] = useState<any[]>([]);
+  const [preOrderLoading, setPreOrderLoading] = useState(false);
+  const [preOrderBadgeText, setPreOrderBadgeText] = useState('Trending');
+  
+  // States for inline preorder editing
+  const [editingPreOrderEntryId, setEditingPreOrderEntryId] = useState<string | null>(null);
+  const [editPreOrderQty, setEditPreOrderQty] = useState(1);
+  const [editPreOrderNote, setEditPreOrderNote] = useState('');
+  const [editPreOrderShowQty, setEditPreOrderShowQty] = useState(true);
+  const [editPreOrderBadgeText, setEditPreOrderBadgeText] = useState('Trending');
 
   // Banner state
 
@@ -64,6 +82,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
 
   // Add click outside handler for profile menu
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const scrollRestored = useRef(false);
 
   // Utility to get user-specific cart key
   const getCartKey = () => {
@@ -85,9 +104,40 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     if (storedId) setId(storedId);
     if (storedToken) setToken(storedToken);
 
+    // Restore state from sessionStorage
+    const savedPage = sessionStorage.getItem('dashboard_currentPage');
+    if (savedPage) setCurrentPage(Number(savedPage));
+
+    const savedTab = sessionStorage.getItem('dashboard_activeTab');
+    if (savedTab) setActiveTab(savedTab);
+
+    const savedSearch = sessionStorage.getItem('dashboard_searchQuery');
+    if (savedSearch) setSearchQuery(savedSearch);
+
+    const savedCategory = sessionStorage.getItem('dashboard_filterCategory');
+    if (savedCategory) setFilterCategory(savedCategory);
+
+    const savedMinPrice = sessionStorage.getItem('dashboard_filterMinPrice');
+    if (savedMinPrice) setFilterMinPrice(savedMinPrice);
+
+    const savedMaxPrice = sessionStorage.getItem('dashboard_filterMaxPrice');
+    if (savedMaxPrice) setFilterMaxPrice(savedMaxPrice);
+
+    const savedMinQty = sessionStorage.getItem('dashboard_filterMinQty');
+    if (savedMinQty) setFilterMinQty(savedMinQty);
+
+    const savedMaxQty = sessionStorage.getItem('dashboard_filterMaxQty');
+    if (savedMaxQty) setFilterMaxQty(savedMaxQty);
+
+    const savedHasOffer = sessionStorage.getItem('dashboard_filterHasOffer');
+    if (savedHasOffer) setFilterHasOffer(savedHasOffer === 'true');
+
     const cartKey = getCartKey();
     const storedCart = localStorage.getItem(cartKey);
     if (storedCart) setCart(JSON.parse(storedCart));
+
+    // Mark component as loaded/initialized
+    setIsLoaded(true);
 
     function handleClickOutside(event: MouseEvent) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
@@ -101,18 +151,105 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     };
   }, []);
 
+  // Save state changes to sessionStorage ONLY after initial restoration is completed
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_currentPage', String(currentPage));
+    }
+  }, [currentPage, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_activeTab', activeTab);
+    }
+  }, [activeTab, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_searchQuery', searchQuery);
+    }
+  }, [searchQuery, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterCategory', filterCategory);
+    }
+  }, [filterCategory, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterMinPrice', filterMinPrice);
+    }
+  }, [filterMinPrice, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterMaxPrice', filterMaxPrice);
+    }
+  }, [filterMaxPrice, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterMinQty', filterMinQty);
+    }
+  }, [filterMinQty, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterMaxQty', filterMaxQty);
+    }
+  }, [filterMaxQty, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.setItem('dashboard_filterHasOffer', String(filterHasOffer));
+    }
+  }, [filterHasOffer, isLoaded]);
+
+  // Track scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoaded && !loading && scrollRestored.current && window.scrollY > 0) {
+        sessionStorage.setItem('dashboard_scrollPos', String(window.scrollY));
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLoaded, loading]);
+
+  // Restore scroll position after loading completes
+  useEffect(() => {
+    if (!loading && isLoaded) {
+      const savedScrollPos = sessionStorage.getItem('dashboard_scrollPos');
+      if (savedScrollPos) {
+        setTimeout(() => {
+          window.scrollTo({
+            top: Number(savedScrollPos),
+            behavior: 'auto'
+          });
+          scrollRestored.current = true;
+        }, 200);
+      } else {
+        scrollRestored.current = true;
+      }
+    }
+  }, [loading, isLoaded]);
+
+
   const handleProfileClick = () => {
     setShowProfileMenu(!showProfileMenu);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userid');
     router.push('/');
   };
 
   const handleExport = () => {
     const csvContent = [
       ['Name', 'SKU', 'Brand', 'Category', 'Price', 'Quantity', 'Created at'],
-      ...products.map(product => [
+      ...filteredProducts.map(product => [
         product.name,
         product.sku,
         product.brand,
@@ -127,7 +264,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'products.csv';
+    a.download = 'filtered_products.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -292,7 +429,8 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           return {
             ...entry.product,
             inventory: entry.inventory,
-            offers: productOffers
+            offers: productOffers,
+            preOrder: entry.preOrder || null
           };
         });
         setProducts(products);
@@ -446,9 +584,36 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
 
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
-    if (imagePath.startsWith('http')) return imagePath;
-    return `${apiurl}${imagePath}`;
+    let url = imagePath;
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      url = url.replace(/https?:\/\/187-127-148-26\.sslip\.io/g, apiurl || 'http://localhost:4000');
+    }
+    if (url.startsWith('http')) return url;
+    const hasLeadSlash = url.startsWith('/');
+    const cleanApiUrl = apiurl?.endsWith('/') ? apiurl.slice(0, -1) : apiurl;
+    return `${cleanApiUrl}${hasLeadSlash ? '' : '/'}${url}`;
   };
+
+  const lastSyncTime = useMemo(() => {
+    if (!products || products.length === 0) return null;
+    let latest: Date | null = null;
+    for (const p of products) {
+      const prod = userType === 'retailer' ? p.product : p;
+      if (prod) {
+        const timeStr = prod.updated_at || prod.created_at;
+        if (timeStr) {
+          const d = new Date(timeStr);
+          if (!isNaN(d.getTime())) {
+            if (!latest || d.getTime() > latest.getTime()) {
+              latest = d;
+            }
+          }
+        }
+      }
+    }
+    if (!latest) return null;
+    return latest.toLocaleString();
+  }, [products, userType]);
 
   const resetFilters = () => {
     setFilterCategory('');
@@ -494,9 +659,17 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
     setCartPopoverPos(null);
   };
 
+  // Helper: get available quantity (inventory minus pre-orders, enforced only if showQuantity is true)
+  const getAvailableQty = (product: any): number => {
+    if (product?.preOrder?.hasHighlight && product?.preOrder?.showQuantity) {
+      return product.preOrder.availableQuantity ?? product.inventory?.quantity ?? 0;
+    }
+    return product?.inventory?.quantity || 0;
+  };
+
   const confirmAddToCart = () => {
     if (!cartModalProduct) return;
-    const maxQty = cartModalProduct.inventory?.quantity || 1;
+    const maxQty = getAvailableQty(cartModalProduct) || 1;
     const qty = Math.min(Number(cartModalQty), maxQty);
     let updatedCart = [...cart];
     const idx = updatedCart.findIndex(p => p.product_id === cartModalProduct.product_id);
@@ -517,6 +690,148 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
   const truncateText = (text: string, maxLength: number) => {
     if (!text) return '';
     return text.length > maxLength ? text.slice(0, maxLength) + '......' : text;
+  };
+
+  // ===== Pre-Order Handlers =====
+  const openPreOrderModal = async (product: any) => {
+    setPreOrderProduct(product);
+    setPreOrderQty(1);
+    setPreOrderNote('');
+    setPreOrderShowQty(true);
+    setPreOrderBadgeText('Trending');
+    setShowPreOrderModal(true);
+    setPreOrderLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${apiurl}/preorder/active?product_id=${product.product_id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setPreOrderEntries(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch pre-orders:', err);
+      setPreOrderEntries([]);
+    } finally {
+      setPreOrderLoading(false);
+    }
+  };
+
+  const handleCreatePreOrder = async () => {
+    if (!preOrderProduct) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+    if (!preOrderQty || preOrderQty <= 0) {
+      toast.error('Quantity must be greater than 0');
+      return;
+    }
+    try {
+      const decoded: any = jwtDecode(token);
+      const partyid = decoded?.partyid;
+      const userid = decoded?.userid;
+      await axios.post(`${apiurl}/preorder`, {
+        product_id: preOrderProduct.product_id,
+        party_id: partyid,
+        quantity: Number(preOrderQty),
+        show_quantity: preOrderShowQty,
+        note: preOrderNote,
+        badge_text: preOrderBadgeText,
+        created_by: userid
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      toast.success('Pre-order added successfully!');
+      // Refresh entries
+      const res = await axios.get(`${apiurl}/preorder/active?product_id=${preOrderProduct.product_id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setPreOrderEntries(res.data || []);
+      setPreOrderQty(1);
+      setPreOrderNote('');
+      setPreOrderShowQty(true);
+      setPreOrderBadgeText('Trending');
+      // Refresh products to update UI
+      fetchProducts();
+    } catch (err) {
+      console.error('Failed to create pre-order:', err);
+      toast.error('Failed to create pre-order');
+    }
+  };
+
+  const handleDeactivatePreOrder = async (id: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      await axios.delete(`${apiurl}/preorder/${id}/deactivate`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      toast.success('Pre-order cleared');
+      if (preOrderProduct) {
+        const res = await axios.get(`${apiurl}/preorder/active?product_id=${preOrderProduct.product_id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setPreOrderEntries(res.data || []);
+      }
+      fetchProducts();
+    } catch (err) {
+      console.error('Failed to deactivate pre-order:', err);
+      toast.error('Failed to clear pre-order');
+    }
+  };
+
+  const handleTogglePreOrderShowQty = async (id: string, currentValue: boolean) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      await axios.patch(`${apiurl}/preorder/${id}`, {
+        show_quantity: !currentValue
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      toast.success('Pre-order updated');
+      if (preOrderProduct) {
+        const res = await axios.get(`${apiurl}/preorder/active?product_id=${preOrderProduct.product_id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setPreOrderEntries(res.data || []);
+      }
+      fetchProducts();
+    } catch (err) {
+      console.error('Failed to update pre-order:', err);
+      toast.error('Failed to update pre-order');
+    }
+  };
+
+  const handleSaveEditedPreOrder = async (id: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!editPreOrderQty || editPreOrderQty <= 0) {
+      toast.error('Quantity must be greater than 0');
+      return;
+    }
+    try {
+      await axios.patch(`${apiurl}/preorder/${id}`, {
+        quantity: Number(editPreOrderQty),
+        note: editPreOrderNote,
+        show_quantity: editPreOrderShowQty,
+        badge_text: editPreOrderBadgeText,
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      toast.success('Pre-order updated successfully!');
+      setEditingPreOrderEntryId(null);
+      if (preOrderProduct) {
+        const res = await axios.get(`${apiurl}/preorder/active?product_id=${preOrderProduct.product_id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setPreOrderEntries(res.data || []);
+      }
+      fetchProducts();
+    } catch (err) {
+      console.error('Failed to update pre-order:', err);
+      toast.error('Failed to update pre-order');
+    }
   };
 
   // const getFullBannerUrl = (url: string | null) => {
@@ -713,7 +1028,15 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Products</h1>
-              <p className="mt-1 text-sm text-gray-600">Manage your products and view their inventory.</p>
+              <div className="mt-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                <p className="text-sm text-gray-600 font-medium">Manage your products and view their inventory.</p>
+                {lastSyncTime && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold bg-blue-50/80 px-2.5 py-1 rounded-full border border-blue-100/50 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    Last Updated (Tally): {lastSyncTime}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               {userType === 'admin' && (
@@ -884,8 +1207,7 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                     </>
                   ) : (
                     <>
-                      {/* Only show these fields if present in product data, in fixed order */}
-                      {['product_id', 'images', 'name', 'short_description', 'sku', 'brand', 'category', 'price', 'inventory', 'offers'].map((field) => {
+                      {['images', 'name', 'inventory', 'price', 'product_id', 'short_description', 'sku', 'brand', 'category', 'offers'].map((field) => {
                         if (!products.some(p => p[field] !== undefined && p[field] !== null)) return null;
                         if (field === 'product_id')
                           return <th key="product_id" className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>;
@@ -957,359 +1279,411 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       key={product.product_id || product._id}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      className={`hover:bg-gray-50 cursor-pointer transition-colors ${product.preOrder?.hasHighlight ? 'bg-amber-50 border-l-4 border-amber-400' : ''}`}
                       onClick={() => {
+                        sessionStorage.setItem('dashboard_scrollPos', String(window.scrollY));
                         const basePath = userType === 'admin' ? '/admin-dashboard/product' : '/retailer-dashboard/product';
                         router.push(`${basePath}/${product.product_id || product._id}`);
                       }}
                     >
-                    {userType === 'admin' ? (
-                      <>
-                        {/* Product ID */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.product_id}</td>
-                        {/* Image */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap">
-                          <div className="h-20 w-20 sm:h-28 sm:w-28 flex-shrink-0 relative overflow-hidden rounded-lg bg-gray-100">
-                            {product.images && product.images.length > 0 ? (
-                              <>
-                                <img
-                                  className="h-full w-full object-contain max-w-full max-h-full"
-                                  src={(() => {
-                                    const img = product.images[product._imageIndex || 0];
-                                    if (!img) return '';
-                                    if (img.startsWith('http')) return img;
-                                    return getImageUrl(img);
-                                  })()}
-                                  alt={product.name}
-                                  onError={e => { (e.target as HTMLImageElement).src = '/no-image.png'; }}
-                                />
-                                {product.images.length > 1 && (
-                                  <div className="absolute bottom-1 right-1 flex space-x-1">
-                                    <button
-                                      className="bg-white bg-opacity-80 rounded-full p-1 text-xs border border-gray-300"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setProducts((prev) => prev.map((p) => {
-                                          if ((p.product_id || p._id) === (product.product_id || product._id)) {
-                                            const idx = typeof p._imageIndex === 'number' ? p._imageIndex : 0;
-                                            return { ...p, _imageIndex: (idx - 1 + p.images.length) % p.images.length };
-                                          }
-                                          return p;
-                                        }));
-                                      }}
-                                    >
-                                      {'<'}
-                                    </button>
-                                    <button
-                                      className="bg-white bg-opacity-80 rounded-full p-1 text-xs border border-gray-300"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setProducts((prev) => prev.map((p) => {
-                                          if ((p.product_id || p._id) === (product.product_id || product._id)) {
-                                            const idx = typeof p._imageIndex === 'number' ? p._imageIndex : 0;
-                                            return { ...p, _imageIndex: (idx + 1) % p.images.length };
-                                          }
-                                          return p;
-                                        }));
-                                      }}
-                                    >
-                                      {'>'}
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center">
-                                <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        {/* Name */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.name}</td>
-                        {/* Description */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-500">{truncateText(product.short_description, 80)}</td>
-                        {/* SKU */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.sku}</td>
-                        {/* Brand */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.brand}</td>
-                        {/* Category */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.category}</td>
-                        {/* Price */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</td>
-                        {/* Quantity */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{product.inventory?.quantity || 0}</td>
-                        {/* Professional Offers Section */}
-                        <td className="px-4 sm:px-6 py-4 align-top min-w-[240px]">
-                          {product.offers && product.offers.length > 0 ? (
-                            <div className="space-y-3">
-                              {product.offers.map((offer: any) => (
-                                <div
-                                  key={offer._id || offer.id}
-                                  className=" rounded-lg p-4 hover:shadow-md transition-all duration-200 bg-white"
-                                >
-                                  {/* Offer Header */}
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-gray-800 text-sm mb-2">
-                                        {truncateText(offer.title, 30)}
-                                      </h4>
-
-                                      {/* Discount Value */}
-                                      <div className="text-lg font-bold text-gray-900">
-                                        {offer.offer_type === "percentage"
-                                          ? `${offer.offer_value}% OFF`
-                                          : offer.offer_type === "flat"
-                                            ? `₹${offer.offer_value} OFF`
-                                            : offer.offer_value}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Dates */}
-                                  <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
-                                    <span className="font-medium">{offer.valid_from?.slice(0, 10)}</span>
-                                    <span className="text-gray-400">to</span>
-                                    <span className="font-medium">{offer.valid_to?.slice(0, 10)}</span>
-                                  </div>
-
-                                  {/* Progress Bar */}
-                                  {offer.valid_from && offer.valid_to && (
-                                    <div className="mt-3">
-                                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                        <span>Progress</span>
-                                        <span>{calculateOfferProgress(offer.valid_from, offer.valid_to)}%</span>
-                                      </div>
-                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                        <div
-                                          className="bg-gray-600 h-1.5 rounded-full transition-all duration-500"
-                                          style={{
-                                            width: `${calculateOfferProgress(offer.valid_from, offer.valid_to)}%`
-                                          }}
-                                        ></div>
-                                      </div>
+                      {userType === 'admin' ? (
+                        <>
+                          {/* Product ID */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.product_id}</td>
+                          {/* Image */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap">
+                            <div className="h-20 w-20 sm:h-28 sm:w-28 flex-shrink-0 relative overflow-hidden rounded-lg bg-gray-100">
+                              {product.images && product.images.length > 0 ? (
+                                <>
+                                  <img
+                                    className="h-full w-full object-contain max-w-full max-h-full"
+                                    src={(() => {
+                                      const img = product.images[product._imageIndex || 0];
+                                      if (!img) return '';
+                                      if (img.startsWith('http')) return img;
+                                      return getImageUrl(img);
+                                    })()}
+                                    alt={product.name}
+                                    onError={e => { (e.target as HTMLImageElement).src = '/no-image.png'; }}
+                                  />
+                                  {product.images.length > 1 && (
+                                    <div className="absolute bottom-1 right-1 flex space-x-1">
+                                      <button
+                                        className="bg-white bg-opacity-80 rounded-full p-1 text-xs border border-gray-300"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setProducts((prev) => prev.map((p) => {
+                                            if ((p.product_id || p._id) === (product.product_id || product._id)) {
+                                              const idx = typeof p._imageIndex === 'number' ? p._imageIndex : 0;
+                                              return { ...p, _imageIndex: (idx - 1 + p.images.length) % p.images.length };
+                                            }
+                                            return p;
+                                          }));
+                                        }}
+                                      >
+                                        {'<'}
+                                      </button>
+                                      <button
+                                        className="bg-white bg-opacity-80 rounded-full p-1 text-xs border border-gray-300"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setProducts((prev) => prev.map((p) => {
+                                            if ((p.product_id || p._id) === (product.product_id || product._id)) {
+                                              const idx = typeof p._imageIndex === 'number' ? p._imageIndex : 0;
+                                              return { ...p, _imageIndex: (idx + 1) % p.images.length };
+                                            }
+                                            return p;
+                                          }));
+                                        }}
+                                      >
+                                        {'>'}
+                                      </button>
                                     </div>
                                   )}
+                                </>
+                              ) : (
+                                <div className="h-full w-full flex items-center justify-center">
+                                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          ) : (
-                            <div className="flex items-center justify-center py-6 text-gray-400">
-                              <div className="text-center">
-                                <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-                                </svg>
-                                <span className="text-sm">No active offers</span>
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Professional Offer Price Section */}
-                        {activeTab === "Offer" && (
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                          </td>
+                          {/* Name */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.name}</td>
+                          {/* Description */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-500">{truncateText(product.short_description, 80)}</td>
+                          {/* SKU */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.sku}</td>
+                          {/* Brand */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.brand}</td>
+                          {/* Category */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.category}</td>
+                          {/* Price */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</td>
+                          {/* Quantity */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div>{product.inventory?.quantity || 0}</div>
+                            {product.preOrder?.hasHighlight && (
+                              <>
+                                <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                  Pre-order {product.preOrder.totalQuantity} {!product.preOrder.showQuantity && "(Hidden)"}
+                                </div>
+                                <div className="mt-0.5 text-xs text-gray-500">
+                                  Available: {product.preOrder.availableQuantity}
+                                </div>
+                              </>
+                            )}
+                          </td>
+                          {/* Professional Offers Section */}
+                          <td className="px-4 sm:px-6 py-4 align-top min-w-[240px]">
                             {product.offers && product.offers.length > 0 ? (
-                              (() => {
+                              <div className="space-y-3">
+                                {product.offers.map((offer: any) => (
+                                  <div
+                                    key={offer._id || offer.id}
+                                    className=" rounded-lg p-4 hover:shadow-md transition-all duration-200 bg-white"
+                                  >
+                                    {/* Offer Header */}
+                                    <div className="flex items-start justify-between mb-3">
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-gray-800 text-sm mb-2">
+                                          {truncateText(offer.title, 30)}
+                                        </h4>
+
+                                        {/* Discount Value */}
+                                        <div className="text-lg font-bold text-gray-900">
+                                          {offer.offer_type === "percentage"
+                                            ? `${offer.offer_value}% OFF`
+                                            : offer.offer_type === "flat"
+                                              ? `₹${offer.offer_value} OFF`
+                                              : offer.offer_value}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Dates */}
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
+                                      <span className="font-medium">{offer.valid_from?.slice(0, 10)}</span>
+                                      <span className="text-gray-400">to</span>
+                                      <span className="font-medium">{offer.valid_to?.slice(0, 10)}</span>
+                                    </div>
+
+                                    {/* Progress Bar */}
+                                    {offer.valid_from && offer.valid_to && (
+                                      <div className="mt-3">
+                                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                          <span>Progress</span>
+                                          <span>{calculateOfferProgress(offer.valid_from, offer.valid_to)}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                          <div
+                                            className="bg-gray-600 h-1.5 rounded-full transition-all duration-500"
+                                            style={{
+                                              width: `${calculateOfferProgress(offer.valid_from, offer.valid_to)}%`
+                                            }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center py-6 text-gray-400">
+                                <div className="text-center">
+                                  <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                                  </svg>
+                                  <span className="text-sm">No active offers</span>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Professional Offer Price Section */}
+                          {activeTab === "Offer" && (
+                            <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                              {product.offers && product.offers.length > 0 ? (
+                                (() => {
+                                  const offer = product.offers[0];
+                                  let offerPrice = product.price;
+                                  let savings = 0;
+
+                                  if (offer.offer_type === "flat") {
+                                    offerPrice = product.price - offer.offer_value;
+                                    savings = offer.offer_value;
+                                  } else if (offer.offer_type === "percentage") {
+                                    savings = product.price * (offer.offer_value / 100);
+                                    offerPrice = product.price - savings;
+                                  }
+
+                                  if (offerPrice < 0) offerPrice = 0;
+
+                                  return (
+                                    <div className="text-center">
+                                      {/* Final Price */}
+                                      <div className="text-xl font-bold text-gray-900 mb-1">
+                                        ₹{offerPrice.toFixed(2)}
+                                      </div>
+
+                                      {/* Original Price */}
+                                      <div className="text-sm text-gray-500 line-through mb-1">
+                                        ₹{product.price?.toFixed(2)}
+                                      </div>
+
+                                      {/* Savings */}
+                                      <div className="text-xs text-green-600 font-medium">
+                                        Save ₹{savings.toFixed(2)}
+                                      </div>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <div className="text-center">
+                                  <div className="text-lg font-semibold text-gray-700">
+                                    ₹{product.price?.toFixed(2) || "0.00"}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Standard
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          {/* Cart */}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-right text-sm font-medium relative">
+                            <div className="inline-block text-left">
+                              <button
+                                className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Add 1 to cart
+                                  let updatedCart = [...cart];
+                                  const idx = updatedCart.findIndex(p => (p.product_id || p._id) === (product.product_id || product._id));
+                                  const maxQty = product.inventory?.quantity || 1;
+                                  if (idx !== -1) {
+                                    // Already in cart, update quantity
+                                    const prevQty = updatedCart[idx].cartQty || 1;
+                                    const newQty = Math.min(prevQty + 1, maxQty);
+                                    updatedCart[idx] = { ...updatedCart[idx], cartQty: newQty };
+                                  } else {
+                                    updatedCart.push({ ...product, cartQty: 1 });
+                                  }
+                                  setCart(updatedCart);
+                                  const cartKey = getCartKey();
+                                  localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+                                  toast.success('Product added to cart!');
+                                  setProducts((prev) => prev.map((p) => ({ ...p, _showActions: false })));
+                                }}
+                              >
+                                Add to Cart
+                              </button>
+                              <button
+                                className="block w-full text-left px-4 py-2 text-amber-700 hover:bg-amber-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPreOrderModal(product);
+                                }}
+                              >
+                                {product.preOrder?.hasHighlight ? 'Manage Pre-Order' : 'Add Pre-Order'}
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          {/* Only show these fields if present in product data, in fixed order */}
+                          {['images', 'name', 'inventory', 'price', 'product_id', 'short_description', 'sku', 'brand', 'category', 'offers'].map((field) => {
+                            if (!products.some(p => p[field] !== undefined && p[field] !== null)) return null;
+                            if (field === 'product_id')
+                              return <td key="product_id" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.product_id}</td>;
+                            if (field === 'images') {
+                              return (
+                                <td key="images" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap">
+                                  <div className="h-20 w-20 sm:h-28 sm:w-28 flex-shrink-0 relative overflow-hidden rounded-lg bg-gray-100">
+                                    {Array.isArray(product.images) && product.images.length > 0 ? (
+                                      <img
+                                        className="h-full w-full object-contain max-w-full max-h-full"
+                                        src={product.images[product._imageIndex || 0] || '/no-image.png'}
+                                        alt={product.name}
+                                        onError={e => { (e.target as HTMLImageElement).src = '/no-image.png'; }}
+                                      />
+                                    ) : (
+                                      <div className="h-full w-full flex items-center justify-center">
+                                        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            }
+                            if (field === 'name')
+                              return <td key="name" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.name}</td>;
+                            if (field === 'short_description')
+                              return <td key="short_description" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-500">{truncateText(product.short_description, 80)}</td>;
+                            if (field === 'sku')
+                              return <td key="sku" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.sku}</td>;
+                            if (field === 'brand')
+                              return <td key="brand" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.brand}</td>;
+                            if (field === 'category')
+                              return <td key="category" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.category}</td>;
+                            if (field === 'price')
+                              return <td key="price" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price?.toFixed ? product.price.toFixed(2) : product.price || '0.00'}</td>;
+                            if (field === 'inventory')
+                              return (
+                                <td key="inventory" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {product.preOrder?.hasHighlight ? (
+                                    <div>
+                                      {/* Always show the actual Tally quantity */}
+                                      <div className="font-medium">{product.inventory?.quantity ?? 0}</div>
+                                      
+                                      {/* Show pre-order badge & available quantity ONLY if showQuantity is true */}
+                                      {product.preOrder.showQuantity ? (
+                                        <>
+                                          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                            Pre-order {product.preOrder.totalQuantity}
+                                          </div>
+                                          <div className="mt-0.5 text-xs text-gray-500">
+                                            Available: {product.preOrder.availableQuantity}
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-xs font-medium animate-pulse">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                                          {product.preOrder.badgeText || 'Trending'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span>{product.inventory?.quantity ?? ''}</span>
+                                  )}
+                                </td>
+                              );
+                            if (field === 'offers') {
+                              return (
+                                <td key="offers" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">
+                                  {product.offers && product.offers.length > 0 ? (
+                                    <ul>
+                                      {product.offers.map((offer: any) => (
+                                        <li key={offer._id || offer.id}>
+                                          <span className="font-semibold">{truncateText(offer.title, 30)}</span>
+                                          {': '}
+                                          <span className="text-green-600 font-semibold">
+                                            {offer.offer_type === 'percentage'
+                                              ? `${offer.offer_value}% off`
+                                              : offer.offer_type === 'flat'
+                                                ? `₹${offer.offer_value} off`
+                                                : offer.offer_value}
+                                          </span>
+                                          <span className="ml-2 text-xs text-gray-500">
+                                            ({offer.valid_from?.slice(0, 10)} to {offer.valid_to?.slice(0, 10)})
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span className="text-gray-400">No active offers</span>
+                                  )}
+                                </td>
+                              );
+                            }
+                            return null;
+                          })}
+                          {activeTab === 'Offer' && (
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm">
+                              {product.offers && product.offers.length > 0 ? (() => {
                                 const offer = product.offers[0];
                                 let offerPrice = product.price;
-                                let savings = 0;
-
-                                if (offer.offer_type === "flat") {
+                                if (offer.offer_type === 'flat') {
                                   offerPrice = product.price - offer.offer_value;
-                                  savings = offer.offer_value;
-                                } else if (offer.offer_type === "percentage") {
-                                  savings = product.price * (offer.offer_value / 100);
-                                  offerPrice = product.price - savings;
+                                } else if (offer.offer_type === 'percentage') {
+                                  offerPrice = product.price * (1 - offer.offer_value / 100);
                                 }
-
                                 if (offerPrice < 0) offerPrice = 0;
-
-                                return (
-                                  <div className="text-center">
-                                    {/* Final Price */}
-                                    <div className="text-xl font-bold text-gray-900 mb-1">
-                                      ₹{offerPrice.toFixed(2)}
-                                    </div>
-
-                                    {/* Original Price */}
-                                    <div className="text-sm text-gray-500 line-through mb-1">
-                                      ₹{product.price?.toFixed(2)}
-                                    </div>
-
-                                    {/* Savings */}
-                                    <div className="text-xs text-green-600 font-medium">
-                                      Save ₹{savings.toFixed(2)}
-                                    </div>
-                                  </div>
-                                );
-                              })()
-                            ) : (
-                              <div className="text-center">
-                                <div className="text-lg font-semibold text-gray-700">
-                                  ₹{product.price?.toFixed(2) || "0.00"}
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Standard
-                                </div>
-                              </div>
-                            )}
+                                return <span className="text-green-600 font-bold">₹{offerPrice.toFixed(2)}</span>;
+                              })() : <span className="text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</span>}
+                            </td>
+                          )}
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-right text-sm font-medium relative">
+                            <div className="inline-block text-left">
+                              <button
+                                className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Add 1 to cart
+                                  let updatedCart = [...cart];
+                                  const idx = updatedCart.findIndex(p => (p.product_id || p._id) === (product.product_id || product._id));
+                                  const maxQty = product.inventory?.quantity || 1;
+                                  if (idx !== -1) {
+                                    // Already in cart, update quantity
+                                    const prevQty = updatedCart[idx].cartQty || 1;
+                                    const newQty = Math.min(prevQty + 1, maxQty);
+                                    updatedCart[idx] = { ...updatedCart[idx], cartQty: newQty };
+                                  } else {
+                                    updatedCart.push({ ...product, cartQty: 1 });
+                                  }
+                                  setCart(updatedCart);
+                                  const cartKey = getCartKey();
+                                  localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+                                  toast.success('Product added to cart!');
+                                  setProducts((prev) => prev.map((p) => ({ ...p, _showActions: false })));
+                                }}
+                              >
+                                Add to Cart
+                              </button>
+                            </div>
                           </td>
-                        )}
-                        {/* Cart */}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-right text-sm font-medium relative">
-                          <div className="inline-block text-left">
-                            <button
-                              className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Add 1 to cart
-                                let updatedCart = [...cart];
-                                const idx = updatedCart.findIndex(p => (p.product_id || p._id) === (product.product_id || product._id));
-                                const maxQty = product.inventory?.quantity || 1;
-                                if (idx !== -1) {
-                                  // Already in cart, update quantity
-                                  const prevQty = updatedCart[idx].cartQty || 1;
-                                  const newQty = Math.min(prevQty + 1, maxQty);
-                                  updatedCart[idx] = { ...updatedCart[idx], cartQty: newQty };
-                                } else {
-                                  updatedCart.push({ ...product, cartQty: 1 });
-                                }
-                                setCart(updatedCart);
-                                const cartKey = getCartKey();
-                                localStorage.setItem(cartKey, JSON.stringify(updatedCart));
-                                toast.success('Product added to cart!');
-                                setProducts((prev) => prev.map((p) => ({ ...p, _showActions: false })));
-                              }}
-                            >
-                              Add to Cart
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        {/* Only show these fields if present in product data, in fixed order */}
-                        {['product_id', 'images', 'name', 'short_description', 'sku', 'brand', 'category', 'price', 'inventory', 'offers'].map((field) => {
-                          if (!products.some(p => p[field] !== undefined && p[field] !== null)) return null;
-                          if (field === 'product_id')
-                            return <td key="product_id" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.product_id}</td>;
-                          if (field === 'images') {
-                            return (
-                              <td key="images" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap">
-                                <div className="h-20 w-20 sm:h-28 sm:w-28 flex-shrink-0 relative overflow-hidden rounded-lg bg-gray-100">
-                                  {Array.isArray(product.images) && product.images.length > 0 ? (
-                                    <img
-                                      className="h-full w-full object-contain max-w-full max-h-full"
-                                      src={product.images[product._imageIndex || 0] || '/no-image.png'}
-                                      alt={product.name}
-                                      onError={e => { (e.target as HTMLImageElement).src = '/no-image.png'; }}
-                                    />
-                                  ) : (
-                                    <div className="h-full w-full flex items-center justify-center">
-                                      <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          }
-                          if (field === 'name')
-                            return <td key="name" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.name}</td>;
-                          if (field === 'short_description')
-                            return <td key="short_description" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-500">{truncateText(product.short_description, 80)}</td>;
-                          if (field === 'sku')
-                            return <td key="sku" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.sku}</td>;
-                          if (field === 'brand')
-                            return <td key="brand" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.brand}</td>;
-                          if (field === 'category')
-                            return <td key="category" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">{product.category}</td>;
-                          if (field === 'price')
-                            return <td key="price" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price?.toFixed ? product.price.toFixed(2) : product.price || '0.00'}</td>;
-                          if (field === 'inventory')
-                            return <td key="inventory" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{product.inventory?.quantity ?? ''}</td>;
-                          if (field === 'offers') {
-                            return (
-                              <td key="offers" className="px-2 sm:px-6 py-2 sm:py-4 whitespace-pre-line break-words max-w-xs text-sm text-gray-900">
-                                {product.offers && product.offers.length > 0 ? (
-                                  <ul>
-                                    {product.offers.map((offer: any) => (
-                                      <li key={offer._id || offer.id}>
-                                        <span className="font-semibold">{truncateText(offer.title, 30)}</span>
-                                        {': '}
-                                        <span className="text-green-600 font-semibold">
-                                          {offer.offer_type === 'percentage'
-                                            ? `${offer.offer_value}% off`
-                                            : offer.offer_type === 'flat'
-                                              ? `₹${offer.offer_value} off`
-                                              : offer.offer_value}
-                                        </span>
-                                        <span className="ml-2 text-xs text-gray-500">
-                                          ({offer.valid_from?.slice(0, 10)} to {offer.valid_to?.slice(0, 10)})
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <span className="text-gray-400">No active offers</span>
-                                )}
-                              </td>
-                            );
-                          }
-                          return null;
-                        })}
-                        {activeTab === 'Offer' && (
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-sm">
-                            {product.offers && product.offers.length > 0 ? (() => {
-                              const offer = product.offers[0];
-                              let offerPrice = product.price;
-                              if (offer.offer_type === 'flat') {
-                                offerPrice = product.price - offer.offer_value;
-                              } else if (offer.offer_type === 'percentage') {
-                                offerPrice = product.price * (1 - offer.offer_value / 100);
-                              }
-                              if (offerPrice < 0) offerPrice = 0;
-                              return <span className="text-green-600 font-bold">₹{offerPrice.toFixed(2)}</span>;
-                            })() : <span className="text-gray-900">₹{product.price?.toFixed(2) || '0.00'}</span>}
-                          </td>
-                        )}
-                        <td className="px-2 sm:px-6 py-2 sm:py-4 whitespace-nowrap text-right text-sm font-medium relative">
-                          <div className="inline-block text-left">
-                            <button
-                              className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Add 1 to cart
-                                let updatedCart = [...cart];
-                                const idx = updatedCart.findIndex(p => (p.product_id || p._id) === (product.product_id || product._id));
-                                const maxQty = product.inventory?.quantity || 1;
-                                if (idx !== -1) {
-                                  // Already in cart, update quantity
-                                  const prevQty = updatedCart[idx].cartQty || 1;
-                                  const newQty = Math.min(prevQty + 1, maxQty);
-                                  updatedCart[idx] = { ...updatedCart[idx], cartQty: newQty };
-                                } else {
-                                  updatedCart.push({ ...product, cartQty: 1 });
-                                }
-                                setCart(updatedCart);
-                                const cartKey = getCartKey();
-                                localStorage.setItem(cartKey, JSON.stringify(updatedCart));
-                                toast.success('Product added to cart!');
-                                setProducts((prev) => prev.map((p) => ({ ...p, _showActions: false })));
-                              }}
-                            >
-                              Add to Cart
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    )}
-                  </motion.tr>
-                ))
-              )}
+                        </>
+                      )}
+                    </motion.tr>
+                  ))
+                )}
               </tbody>
             </table>
 
@@ -1718,6 +2092,263 @@ export default function ProductDashboardPage({ userType }: { userType: 'admin' |
           </div>
         </div>
       )}
+
+      {/* Pre-Order Modal (Admin only) */}
+      {showPreOrderModal && preOrderProduct && userType === 'admin' && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Pre-Order Management
+                </h3>
+                <button
+                  onClick={() => setShowPreOrderModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Product Info */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                <div className="font-medium text-gray-900">{preOrderProduct.name}</div>
+                <div className="text-sm text-gray-500">
+                  SKU: {preOrderProduct.sku} | Total Inventory: {preOrderProduct.inventory?.quantity || 0}
+                </div>
+                {preOrderProduct.preOrder?.hasHighlight && (
+                  <div className="mt-2 text-sm">
+                    <span className="text-amber-700 font-medium">
+                      Current Pre-order: {preOrderProduct.preOrder.totalQuantity}
+                    </span>
+                    <span className="ml-2 text-gray-600">
+                      Available: {preOrderProduct.preOrder.availableQuantity}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Existing Pre-Order Entries */}
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Active Pre-Orders</h4>
+                {preOrderLoading ? (
+                  <div className="text-sm text-gray-500 py-4 text-center">Loading...</div>
+                ) : preOrderEntries.length === 0 ? (
+                  <div className="text-sm text-gray-400 py-4 text-center">No active pre-orders</div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {preOrderEntries.map((entry: any) => {
+                      const entryId = entry._id || entry.id;
+                      const isEditing = editingPreOrderEntryId === entryId;
+                      return (
+                        <div key={entryId} className="w-full">
+                          {isEditing ? (
+                            <div className="p-3 border border-amber-300 bg-amber-50/50 rounded-lg space-y-3 w-full">
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="block text-[10px] uppercase font-bold text-gray-500">Edit Qty</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={editPreOrderQty}
+                                    onChange={(e) => setEditPreOrderQty(Number(e.target.value))}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  />
+                                </div>
+                                <div className="flex-[2]">
+                                  <label className="block text-[10px] uppercase font-bold text-gray-500">Edit Note</label>
+                                  <input
+                                    type="text"
+                                    value={editPreOrderNote}
+                                    onChange={(e) => setEditPreOrderNote(e.target.value)}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] uppercase font-bold text-gray-500">Edit Highlight Badge</label>
+                                <input
+                                  type="text"
+                                  value={editPreOrderBadgeText}
+                                  onChange={(e) => setEditPreOrderBadgeText(e.target.value)}
+                                  className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {['Trending', 'Hot Seller', 'High Demand', 'New Arrival'].map((opt) => (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => setEditPreOrderBadgeText(opt)}
+                                      className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${editPreOrderBadgeText === opt ? 'bg-amber-100 border-amber-400 text-amber-800 font-medium' : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                      {opt}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between border-t pt-2 mt-2">
+                                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={editPreOrderShowQty}
+                                    onChange={(e) => setEditPreOrderShowQty(e.target.checked)}
+                                  />
+                                  Show Qty to Retailers
+                                </label>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setEditingPreOrderEntryId(null)}
+                                    className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveEditedPreOrder(entryId)}
+                                    className="text-xs text-white bg-amber-600 hover:bg-amber-700 px-3 py-1 rounded font-semibold"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-gray-900">Qty: {entry.quantity}</span>
+                                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium border border-gray-200/50">
+                                    Badge: {entry.badge_text || 'Trending'}
+                                  </span>
+                                </div>
+                                {entry.note && <div className="text-xs text-gray-500 mt-1">Note: {entry.note}</div>}
+                                <div className="text-[10px] text-gray-400 mt-1">
+                                  Created: {new Date(entry.createdAt || entry.created_at).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={entry.show_quantity}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      handleTogglePreOrderShowQty(entryId, entry.show_quantity);
+                                    }}
+                                  />
+                                  Show Qty
+                                </label>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingPreOrderEntryId(entryId);
+                                    setEditPreOrderQty(entry.quantity);
+                                    setEditPreOrderNote(entry.note || '');
+                                    setEditPreOrderShowQty(entry.show_quantity);
+                                    setEditPreOrderBadgeText(entry.badge_text || 'Trending');
+                                  }}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeactivatePreOrder(entryId);
+                                  }}
+                                  className="text-xs text-red-600 hover:text-red-800 font-semibold"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Add New Pre-Order Form */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Add New Pre-Order</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Quantity*</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={preOrderQty}
+                      onChange={(e) => setPreOrderQty(Number(e.target.value))}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Note (optional)</label>
+                    <input
+                      type="text"
+                      value={preOrderNote}
+                      onChange={(e) => setPreOrderNote(e.target.value)}
+                      placeholder="e.g. Customer name, order ref"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Highlight Badge Text</label>
+                    <input
+                      type="text"
+                      value={preOrderBadgeText}
+                      onChange={(e) => setPreOrderBadgeText(e.target.value)}
+                      placeholder="e.g. Trending, Hot Seller"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                    />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {['Trending', 'Hot Seller', 'High Demand', 'New Arrival'].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setPreOrderBadgeText(opt)}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-all ${preOrderBadgeText === opt ? 'bg-amber-100 border-amber-400 text-amber-800 font-medium' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={preOrderShowQty}
+                      onChange={(e) => setPreOrderShowQty(e.target.checked)}
+                    />
+                    Show quantity to retailers (uncheck for highlight only)
+                  </label>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-5 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPreOrderModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreatePreOrder}
+                  className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-amber-600 hover:bg-amber-700"
+                >
+                  Add Pre-Order
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-} 
+}

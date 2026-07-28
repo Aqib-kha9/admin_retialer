@@ -8,6 +8,7 @@ import AdminNavbar from './AdminNavbar';
 import RetailerNavbar from './RetailerNavbar';
 import UniversalLoader from './UniversalLoader';
 import { motion } from 'framer-motion';
+import { FaArrowLeft } from 'react-icons/fa';
 
 export default function ProfilePage({ userType }: { userType: 'admin' | 'retailer' }) {
   const router = useRouter();
@@ -111,6 +112,13 @@ const apiurl = process.env.NEXT_PUBLIC_APIURL;
       
       <div className="py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <button
+            onClick={() => router.push(userType === 'admin' ? '/admin-dashboard' : '/retailer-dashboard')}
+            className="inline-flex items-center space-x-2 text-gray-500 hover:text-gray-950 transition-colors mb-6 group cursor-pointer"
+          >
+            <FaArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            <span className="font-medium text-sm">Back to Dashboard</span>
+          </button>
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

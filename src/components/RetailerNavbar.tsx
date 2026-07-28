@@ -9,7 +9,11 @@ export default function RetailerNavbar({ active }: { active?: string }) {
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const handleProfileClick = () => setShowProfileMenu((v) => !v);
-  const handleLogout = () => router.push("/");
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userid');
+    router.push("/");
+  };
 
   return (
     <nav className="bg-white border-b border-gray-200 w-full z-30">

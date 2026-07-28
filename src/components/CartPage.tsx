@@ -5,7 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import AdminNavbar from './AdminNavbar';
 import RetailerNavbar from './RetailerNavbar';
 import { motion } from 'framer-motion';
-
+import { FaArrowLeft } from 'react-icons/fa';
 // ...other necessary imports from the original cart page...
 
 export default function CartPage({ userType }: { userType: 'admin' | 'retailer' }) {
@@ -37,9 +37,16 @@ export default function CartPage({ userType }: { userType: 'admin' | 'retailer' 
     localStorage.removeItem(cartKey);
   };
 
+  const getAvailableQty = (product: any): number => {
+    if (product?.preOrder?.hasHighlight && product?.preOrder?.showQuantity) {
+      return product.preOrder.availableQuantity ?? product.inventory?.quantity ?? 0;
+    }
+    return product?.inventory?.quantity || 0;
+  };
+
   const handleQtyChange = (idx: number, value: number) => {
     let newCart = [...cart];
-    const maxQty = newCart[idx].inventory?.quantity || 1;
+    const maxQty = getAvailableQty(newCart[idx]) || 1;
     let qty = Math.max(1, Math.min(value, maxQty));
     newCart[idx].cartQty = qty;
     setCart(newCart);
@@ -104,6 +111,13 @@ export default function CartPage({ userType }: { userType: 'admin' | 'retailer' 
       )}
       
       <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <button
+          onClick={() => router.push(userType === 'admin' ? '/admin-dashboard' : '/retailer-dashboard')}
+          className="inline-flex items-center space-x-2 text-gray-500 hover:text-gray-950 transition-colors mb-6 group cursor-pointer"
+        >
+          <FaArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <span className="font-medium text-sm">Back to Dashboard</span>
+        </button>
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -144,12 +158,12 @@ export default function CartPage({ userType }: { userType: 'admin' | 'retailer' 
                             <input
                               type="number"
                               min={1}
-                              max={product.inventory?.quantity || 1}
+                              max={getAvailableQty(product) || 1}
                               value={product.cartQty || 1}
                               onChange={e => handleQtyChange(idx, Number(e.target.value))}
                               className="w-16 border border-gray-300 rounded-md py-1 px-2"
                             />
-                            <span className="ml-2 text-xs text-gray-500">/ {product.inventory?.quantity || 1}</span>
+                            <span className="ml-2 text-xs text-gray-500">/ {getAvailableQty(product) || 1}</span>
                           </td>
                         );
                       }
